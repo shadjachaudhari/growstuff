@@ -1,10 +1,11 @@
 require 'rails_helper'
 
 feature "Planting a crop", js: true do
-  let!(:garden) { create :garden }
-  let!(:planting) { create :planting, garden: garden, planted_at: Date.parse("2013-3-10") }
+  # name is aaa to ensure it is ordered first
+  let!(:garden) { create :garden, name: 'aaa' }
+  let!(:planting) { create :planting, garden: garden, owner: garden.owner, planted_at: Date.parse("2013-3-10") }
   let!(:tomato) { create :tomato }
-  let!(:finished_planting) { create :finished_planting, garden: garden, crop: tomato }
+  let!(:finished_planting) { create :finished_planting, owner: garden.owner, garden: garden, crop: tomato }
 
   background do
     login_as garden.owner
@@ -58,7 +59,7 @@ feature "Planting a crop", js: true do
     end
 
     scenario "button on index to edit garden" do
-      first(".panel-title").click_link("edit_garden_glyphicon")
+      click_link href: edit_garden_path(garden)
       expect(page).to have_content 'Edit garden'
     end
   end
@@ -67,7 +68,9 @@ feature "Planting a crop", js: true do
     visit new_garden_path
     fill_in "Name", with: "New garden"
     click_button "Save"
-    click_link 'edit_garden_link'
+    within '.garden-actions' do
+      click_link 'Edit'
+    end
     fill_in "Name", with: "Different name"
     click_button "Save"
     expect(page).to have_content "Garden was successfully updated"
@@ -87,6 +90,7 @@ feature "Planting a crop", js: true do
   describe "Making a planting inactive from garden show" do
     let(:path) { garden_path garden }
     let(:link_text) { "Mark as finished" }
+
     it_behaves_like "append date"
   end
 

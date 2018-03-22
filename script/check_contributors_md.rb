@@ -18,11 +18,10 @@ if ENV['TRAVIS']
   end
 else
   author = `git config github.user`.chomp
-  if $?.exitstatus.positive?
+  if $CHILD_STATUS.exitstatus.positive?
     abort %(
 Couldn't determine your GitHub username, and not in a Travis PR build
 Please set it using
-
     git config --add github.user [username]
 )
   end

@@ -2,7 +2,7 @@ class Garden < ActiveRecord::Base
   extend FriendlyId
   include Geocodable
   include PhotoCapable
-  friendly_id :garden_slug, use: [:slugged, :finders]
+  friendly_id :garden_slug, use: %i(slugged finders)
 
   belongs_to :owner, class_name: 'Member', foreign_key: 'owner_id', counter_cache: true
   has_many :plantings, dependent: :destroy
@@ -14,7 +14,7 @@ class Garden < ActiveRecord::Base
   after_validation :empty_unwanted_geocodes
   after_save :mark_inactive_garden_plantings_as_finished
 
-  default_scope { joins(:owner).order("lower(name) asc") }
+  default_scope { joins(:owner) } # Ensures owner exists
   scope :active, -> { where(active: true) }
   scope :inactive, -> { where(active: false) }
 
@@ -23,7 +23,7 @@ class Garden < ActiveRecord::Base
 
   validates :name,
     format: {
-      with: /\A\w+[\w ]+\z/
+      with: /\A\w+[\w ()]+\z/
     },
     length: { maximum: 255 }
 
@@ -41,7 +41,7 @@ class Garden < ActiveRecord::Base
     "acres" => "acre"
   }.freeze
   validates :area_unit, inclusion: { in: AREA_UNITS_VALUES.values,
-                                     message: "%{value} is not a valid area unit" },
+                                     message: "%<value>s is not a valid area unit" },
                         allow_nil: true,
                         allow_blank: true
 
@@ -62,7 +62,7 @@ class Garden < ActiveRecord::Base
     unique_plantings = []
     seen_crops = []
 
-    plantings.includes(:garden, :crop, :owner, :harvests).each do |p|
+    plantings.order(created_at: :desc).includes(:garden, :crop, :owner, :harvests).each do |p|
       unless seen_crops.include?(p.crop)
         unique_plantings.push(p)
         seen_crops.push(p.crop)
@@ -88,6 +88,6 @@ class Garden < ActiveRecord::Base
   end
 
   def default_photo
-    photos.first
+    photos.order(created_at: :desc).first
   end
 end

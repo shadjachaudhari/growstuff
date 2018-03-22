@@ -1,21 +1,9 @@
-## DEPRECATION NOTICE: Do not add new tests to this file!
-##
-## View and controller tests are deprecated in the Growstuff project.
-## We no longer write new view and controller tests, but instead write
-## feature tests (in spec/features) using Capybara (https://github.com/jnicklas/capybara).
-## These test the full stack, behaving as a browser, and require less complicated setup
-## to run. Please feel free to delete old view/controller tests as they are reimplemented
-## in feature tests.
-##
-## If you submit a pull request containing new view or controller tests, it will not be
-## merged.
-
 require 'rails_helper'
 
 describe "posts/new" do
   before(:each) do
-    @author = FactoryGirl.create(:member)
-    assign(:post, FactoryGirl.create(:post, author: @author))
+    @author = FactoryBot.create(:member)
+    assign(:post, FactoryBot.create(:post, author: @author))
     # assign(:forum, Forum.new)
     sign_in @author
     controller.stub(:current_user) { @author }
@@ -46,8 +34,8 @@ describe "posts/new" do
 
   context "forum specified" do
     before(:each) do
-      @forum = assign(:forum, FactoryGirl.create(:forum))
-      assign(:post, FactoryGirl.create(:post, forum: @forum))
+      @forum = assign(:forum, FactoryBot.create(:forum))
+      assign(:post, FactoryBot.create(:post, forum: @forum))
       render
     end
 

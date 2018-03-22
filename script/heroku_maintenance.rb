@@ -1,9 +1,9 @@
 #!/usr/bin/env ruby
 
-require 'heroku-api'
+require 'platform-api'
 require 'yaml'
 
-heroku = Heroku::API.new(api_key: ENV['HEROKU_API_KEY'])
+heroku = PlatformAPI.connect(ENV['HEROKU_API_KEY'])
 branch = ENV['TRAVIS_BRANCH']
 travis_config = YAML.load_file('.travis.yml')
 if travis_config['deploy']['app'].key? branch
@@ -14,12 +14,12 @@ end
 
 case ARGV[0]
 when "on"
-  maintenance_state = 1
+  maintenance_state = true
 when "off"
-  maintenance_state = 0
+  maintenance_state = false
 else
-  abort "usage: #{$0} (on|off)"
+  abort "usage: #{$PROGRAM_NAME} (on|off)"
 end
 
 puts "Turning #{maintenance_state} maintenance mode on app #{app}"
-heroku.post_app_maintenance(app, maintenance_state)
+heroku.app.update app, maintenance: maintenance_state

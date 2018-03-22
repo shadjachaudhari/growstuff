@@ -31,6 +31,7 @@ PreCommit:
     enabled: true
     on_fail: warn
     command: ['npm', 'run', 'coffeelint']
+    required_executable: 'npm'
   HardTabs:
     enabled: true
   AuthorEmail:
@@ -42,9 +43,12 @@ PreCommit:
     exclude:
       - '**/bootstrap.min.css'
     command: ['npm', 'run', 'csslint']
+    required_executable: 'npm'
   HamlLint:
     enabled: true
-    command: ['bundle', 'exec', 'haml-lint', 'app/views']
+    include:
+      - 'app/views/**'
+    command: ['bundle', 'exec', 'haml-lint']
   JsonSyntax:
     enabled: true
   BundleOutdated:
@@ -53,13 +57,14 @@ PreCommit:
   BundleAudit:
     enabled: true
     on_warn: warn
-  JsHint:
+  EsLint:
     enabled: true
     exclude:
       - 'app/assets/**'
       - 'spec/javascripts/support/vendor/**'
       - '**/bootstrap*'
-    command: ['npm', 'run', 'jshint']
+    command: ['./node_modules/.bin/eslint']
+    required_executable: 'npm'
   ScssLint:
     enabled: true
   RailsSchemaUpToDate:
@@ -68,11 +73,6 @@ PreCommit:
     enabled: true
   YamlLint:
     enabled: true
-
-PostCommit:
-  GitGuilt:
-    enabled: true
-    command: ['npm', 'run', 'git-guilt']
 
 PostCheckout:
   ALL:

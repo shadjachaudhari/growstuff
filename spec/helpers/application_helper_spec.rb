@@ -3,7 +3,7 @@ require 'rails_helper'
 describe ApplicationHelper do
   it "formats prices" do
     price_in_dollars(999).should eq '9.99'
-    price_with_currency(999).should eq '9.99 %s' % Growstuff::Application.config.currency
+    price_with_currency(999).should eq format('9.99 %s', Growstuff::Application.config.currency)
   end
 
   it "parses dates" do
@@ -23,7 +23,7 @@ describe ApplicationHelper do
   describe '#avatar_uri' do
     context 'with a normal user' do
       before :each do
-        @member = FactoryGirl.build(:member, email: 'example@example.com', preferred_avatar_uri: nil)
+        @member = FactoryBot.build(:member, email: 'example@example.com', preferred_avatar_uri: nil)
       end
       it 'should render a gravatar uri' do
         expect(avatar_uri(@member)).to eq 'http://www.gravatar.com/avatar/23463b99b62a72f26ed677cc556c44e8?size=150&default=identicon'
@@ -36,7 +36,7 @@ describe ApplicationHelper do
 
     context 'with a user who specified a preferred avatar uri' do
       before :each do
-        @member = FactoryGirl.build(:member, email: 'example@example.com', preferred_avatar_uri: 'http://media.catmoji.com/post/ujg/cat-in-hat.jpg')
+        @member = FactoryBot.build(:member, email: 'example@example.com', preferred_avatar_uri: 'http://media.catmoji.com/post/ujg/cat-in-hat.jpg')
       end
       it 'should render a the specified uri' do
         expect(avatar_uri(@member)).to eq 'http://media.catmoji.com/post/ujg/cat-in-hat.jpg'

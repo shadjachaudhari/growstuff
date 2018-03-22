@@ -1,9 +1,9 @@
-FactoryGirl.define do
+FactoryBot.define do
   factory :post do
     subject "A Post"
     body "This is some text."
     author
-    created_at Time.now
+    created_at { Time.now }
 
     # Markdown is allowed in posts
     factory :markdown_post do

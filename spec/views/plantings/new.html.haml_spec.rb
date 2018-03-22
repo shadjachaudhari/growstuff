@@ -1,31 +1,20 @@
-## DEPRECATION NOTICE: Do not add new tests to this file!
-##
-## View and controller tests are deprecated in the Growstuff project.
-## We no longer write new view and controller tests, but instead write
-## feature tests (in spec/features) using Capybara (https://github.com/jnicklas/capybara).
-## These test the full stack, behaving as a browser, and require less complicated setup
-## to run. Please feel free to delete old view/controller tests as they are reimplemented
-## in feature tests.
-##
-## If you submit a pull request containing new view or controller tests, it will not be
-## merged.
-
 require 'rails_helper'
 
 describe "plantings/new" do
   before(:each) do
-    @member = FactoryGirl.create(:member)
+    @member = FactoryBot.create(:member)
     controller.stub(:current_user) { @member }
 
     # create gardens and crops to populate dropdowns
-    @garden_a = FactoryGirl.create(:garden, owner: @member)
-    @garden_z = FactoryGirl.create(:garden, owner: @member)
-    @crop1 = FactoryGirl.create(:tomato)
-    @crop2 = FactoryGirl.create(:maize)
+    @garden_a = FactoryBot.create(:garden, owner: @member)
+    @garden_z = FactoryBot.create(:garden, owner: @member)
+    @crop1 = FactoryBot.create(:tomato)
+    @crop2 = FactoryBot.create(:maize)
 
-    assign(:planting, FactoryGirl.create(:planting,
+    assign(:planting, FactoryBot.create(:planting,
       garden: @garden_a,
-      crop: @crop2))
+      crop: @crop2,
+      owner: @member))
   end
 
   context "logged in" do
