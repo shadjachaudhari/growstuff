@@ -1,30 +1,20 @@
-## DEPRECATION NOTICE: Do not add new tests to this file!
-##
-## View and controller tests are deprecated in the Growstuff project.
-## We no longer write new view and controller tests, but instead write
-## feature tests (in spec/features) using Capybara (https://github.com/jnicklas/capybara).
-## These test the full stack, behaving as a browser, and require less complicated setup
-## to run. Please feel free to delete old view/controller tests as they are reimplemented
-## in feature tests.
-##
-## If you submit a pull request containing new view or controller tests, it will not be
-## merged.
-
 require 'rails_helper'
 
 describe "plantings/_form" do
   before(:each) do
-    controller.stub(:current_user) { nil }
-    @member = FactoryGirl.create(:member)
-    @garden = FactoryGirl.create(:garden, owner: @member)
-    @uppercase = FactoryGirl.create(:uppercasecrop)
-    @lowercase = FactoryGirl.create(:lowercasecrop)
+    @member = FactoryBot.create(:member)
+    @garden = FactoryBot.create(:garden, owner: @member)
+    @uppercase = FactoryBot.create(:uppercasecrop)
+    @lowercase = FactoryBot.create(:lowercasecrop)
     @crop = @lowercase # needed to render the form
 
-    @planting = FactoryGirl.create(:planting,
+    @planting = FactoryBot.create(:planting,
       garden: @garden,
       crop: @crop,
+      owner: @member,
       planted_at: Date.new(2013, 3, 1))
+
+    sign_in @member
     render
   end
 

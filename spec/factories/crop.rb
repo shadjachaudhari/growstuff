@@ -1,9 +1,16 @@
-FactoryGirl.define do
+FactoryBot.define do
   factory :crop do
     name "magic bean"
     en_wikipedia_url "http://en.wikipedia.org/wiki/Magic_bean"
     approval_status "approved"
     creator
+
+    factory :annual_crop, parent: :crop do
+      perennial false
+    end
+    factory :perennial_crop, parent: :crop do
+      perennial true
+    end
 
     factory :tomato do
       name "tomato"

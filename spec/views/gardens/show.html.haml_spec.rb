@@ -1,23 +1,11 @@
-## DEPRECATION NOTICE: Do not add new tests to this file!
-##
-## View and controller tests are deprecated in the Growstuff project
-## We no longer write new view and controller tests, but instead write
-## feature tests (in spec/features) using Capybara (https://github.com/jnicklas/capybara).
-## These test the full stack, behaving as a browser, and require less complicated setup
-## to run. Please feel free to delete old view/controller tests as they are reimplemented
-## in feature tests.
-##
-## If you submit a pull request containing new view or controller tests, it will not be
-## merged.
-
 require 'rails_helper'
 
 describe "gardens/show" do
   before(:each) do
-    @owner = FactoryGirl.create(:member)
+    @owner = FactoryBot.create(:member)
     controller.stub(:current_user) { @owner }
-    @garden   = FactoryGirl.create(:garden, owner: @owner)
-    @planting = FactoryGirl.create(:planting, garden: @garden)
+    @garden   = FactoryBot.create(:garden, owner: @owner)
+    @planting = FactoryBot.create(:planting, garden: @garden, owner: @garden.owner)
     assign(:garden, @garden)
     assign(:current_plantings, [@planting])
     assign(:finished_plantings, [])
@@ -55,11 +43,15 @@ describe "gardens/show" do
     end
 
     it 'should have an edit button' do
-      rendered.should have_link 'edit_garden_link'
+      rendered.should have_link 'Edit'
     end
 
     it "shows a 'plant something' button" do
       rendered.should have_content "Plant something"
+    end
+
+    it "shows an 'add photo' button" do
+      rendered.should have_content "Add photo"
     end
 
     it "links to the right crop in the planting link" do

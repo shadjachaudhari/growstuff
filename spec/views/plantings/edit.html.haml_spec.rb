@@ -1,34 +1,22 @@
-## DEPRECATION NOTICE: Do not add new tests to this file!
-##
-## View and controller tests are deprecated in the Growstuff project.
-## We no longer write new view and controller tests, but instead write
-## feature tests (in spec/features) using Capybara (https://github.com/jnicklas/capybara).
-## These test the full stack, behaving as a browser, and require less complicated setup
-## to run. Please feel free to delete old view/controller tests as they are reimplemented
-## in feature tests.
-##
-## If you submit a pull request containing new view or controller tests, it will not be
-## merged.
-
 require 'rails_helper'
 
 describe "plantings/edit" do
   before(:each) do
-    @member = FactoryGirl.create(:member,
+    @member = FactoryBot.create(:member,
       login_name: 'right',
       email: 'right@example.com')
 
     # creating two crops to make sure that the correct one is selected
     # in the form.
-    @tomato = FactoryGirl.create(:tomato)
-    @maize = FactoryGirl.create(:maize)
+    @tomato = FactoryBot.create(:tomato)
+    @maize = FactoryBot.create(:maize)
 
     # and likewise for gardens
-    @garden =  FactoryGirl.create(:garden_z, owner: @member)
-    @garden2 = FactoryGirl.create(:garden_a, owner: @member)
+    @garden =  FactoryBot.create(:garden_z, owner: @member)
+    @garden2 = FactoryBot.create(:garden_a, owner: @member)
 
     @planting = assign(:planting,
-      FactoryGirl.create(:planting, garden: @garden, crop: @tomato))
+      FactoryBot.create(:planting, garden: @garden, crop: @tomato, owner: @member))
   end
 
   context "logged in" do

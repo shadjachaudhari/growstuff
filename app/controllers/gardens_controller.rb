@@ -1,6 +1,6 @@
 class GardensController < ApplicationController
-  before_action :authenticate_member!, except: [:index, :show]
-  after_action :expire_homepage, only: [:create, :delete]
+  before_action :authenticate_member!, except: %i(index show)
+  after_action :expire_homepage, only: %i(create delete)
   load_and_authorize_resource
   respond_to :html, :json
 
@@ -68,6 +68,6 @@ class GardensController < ApplicationController
   def gardens
     g = @owner ? @owner.gardens : Garden.all
     g = g.active unless @show_all
-    g.joins(:owner).order(:updated_at).paginate(page: params[:page])
+    g.joins(:owner).order(:name).paginate(page: params[:page])
   end
 end

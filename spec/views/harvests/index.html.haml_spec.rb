@@ -1,33 +1,21 @@
-## DEPRECATION NOTICE: Do not add new tests to this file!
-##
-## View and controller tests are deprecated in the Growstuff project
-## We no longer write new view and controller tests, but instead write
-## feature tests (in spec/features) using Capybara (https://github.com/jnicklas/capybara).
-## These test the full stack, behaving as a browser, and require less complicated setup
-## to run. Please feel free to delete old view/controller tests as they are reimplemented
-## in feature tests.
-##
-## If you submit a pull request containing new view or controller tests, it will not be
-## merged.
-
 require 'rails_helper'
 
 describe "harvests/index" do
   before(:each) do
     controller.stub(:current_user) { nil }
-    @member = FactoryGirl.create(:member)
-    @tomato = FactoryGirl.create(:tomato)
-    @maize  = FactoryGirl.create(:maize)
-    @pp = FactoryGirl.create(:plant_part)
+    @member = FactoryBot.create(:member)
+    @tomato = FactoryBot.create(:tomato)
+    @maize  = FactoryBot.create(:maize)
+    @pp = FactoryBot.create(:plant_part)
     page = 1
     per_page = 2
     total_entries = 2
     harvests = WillPaginate::Collection.create(page, per_page, total_entries) do |pager|
       pager.replace([
-                      FactoryGirl.create(:harvest,
+                      FactoryBot.create(:harvest,
                         crop: @tomato,
                         owner: @member),
-                      FactoryGirl.create(:harvest,
+                      FactoryBot.create(:harvest,
                         crop: @maize,
                         plant_part: @pp,
                         owner: @member)

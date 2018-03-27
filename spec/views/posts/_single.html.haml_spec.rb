@@ -1,15 +1,3 @@
-## DEPRECATION NOTICE: Do not add new tests to this file!
-##
-## View and controller tests are deprecated in the Growstuff project.
-## We no longer write new view and controller tests, but instead write
-## feature tests (in spec/features) using Capybara (https://github.com/jnicklas/capybara).
-## These test the full stack, behaving as a browser, and require less complicated setup
-## to run. Please feel free to delete old view/controller tests as they are reimplemented
-## in feature tests.
-##
-## If you submit a pull request containing new view or controller tests, it will not be
-## merged.
-
 require 'rails_helper'
 
 describe "posts/_single" do
@@ -18,7 +6,7 @@ describe "posts/_single" do
   end
 
   before(:each) do
-    @post = FactoryGirl.create(:post)
+    @post = FactoryBot.create(:post)
     controller.stub(:current_user) { nil }
   end
 
@@ -38,7 +26,7 @@ describe "posts/_single" do
 
   context "when logged in" do
     before(:each) do
-      @member = FactoryGirl.create(:member)
+      @member = FactoryBot.create(:member)
       sign_in @member
       controller.stub(:current_user) { @member }
       render_post
@@ -55,10 +43,10 @@ describe "posts/_single" do
 
   context "when logged in as post author" do
     before(:each) do
-      @member = FactoryGirl.create(:member)
+      @member = FactoryBot.create(:member)
       sign_in @member
       controller.stub(:current_user) { @member }
-      @post = FactoryGirl.create(:post, author: @member)
+      @post = FactoryBot.create(:post, author: @member)
       render_post
     end
 
@@ -79,7 +67,7 @@ describe "posts/_single" do
 
   context "when there is 1 comment" do
     before(:each) do
-      @comment = FactoryGirl.create(:comment, post: @post)
+      @comment = FactoryBot.create(:comment, post: @post)
       render_post
     end
 
@@ -90,8 +78,8 @@ describe "posts/_single" do
 
   context "when there are 2 comments" do
     before(:each) do
-      @comment = FactoryGirl.create(:comment, post: @post)
-      @comment2 = FactoryGirl.create(:comment, post: @post)
+      @comment = FactoryBot.create(:comment, post: @post)
+      @comment2 = FactoryBot.create(:comment, post: @post)
       render_post
     end
 
@@ -102,10 +90,10 @@ describe "posts/_single" do
 
   context "when comments should be hidden" do
     before(:each) do
-      @member = FactoryGirl.create(:member)
+      @member = FactoryBot.create(:member)
       sign_in @member
       controller.stub(:current_user) { @member }
-      @comment = FactoryGirl.create(:comment, post: @post)
+      @comment = FactoryBot.create(:comment, post: @post)
       render partial: "single", locals: {
         post: @post, hide_comments: true
       }
@@ -126,10 +114,10 @@ describe "posts/_single" do
 
   context "when post has been edited" do
     before(:each) do
-      @member = FactoryGirl.create(:member)
+      @member = FactoryBot.create(:member)
       sign_in @member
       controller.stub(:current_user) { @member }
-      @post = FactoryGirl.create(:post, author: @member)
+      @post = FactoryBot.create(:post, author: @member)
       @post.update(body: "I am updated")
       render_post
     end
@@ -145,11 +133,11 @@ describe "posts/_single" do
 
   context "when comment has been edited" do
     before(:each) do
-      @member = FactoryGirl.create(:member)
+      @member = FactoryBot.create(:member)
       sign_in @member
       controller.stub(:current_user) { @member }
-      @post = FactoryGirl.create(:post, author: @member)
-      @comment = FactoryGirl.create(:comment, post: @post)
+      @post = FactoryBot.create(:post, author: @member)
+      @comment = FactoryBot.create(:comment, post: @post)
       @comment.update(body: "I've been updated")
       render partial: "comments/single", locals: { comment: @comment }
     end
@@ -165,10 +153,10 @@ describe "posts/_single" do
 
   context "when post has not been edited" do
     before(:each) do
-      @member = FactoryGirl.create(:member)
+      @member = FactoryBot.create(:member)
       sign_in @member
       controller.stub(:current_user) { @member }
-      @post = FactoryGirl.create(:post, author: @member)
+      @post = FactoryBot.create(:post, author: @member)
       @post.update(updated_at: @post.created_at)
       render_post
     end
@@ -180,11 +168,11 @@ describe "posts/_single" do
 
   context "when comment has not been edited" do
     before(:each) do
-      @member = FactoryGirl.create(:member)
+      @member = FactoryBot.create(:member)
       sign_in @member
       controller.stub(:current_user) { @member }
-      @post = FactoryGirl.create(:post, author: @member)
-      @comment = FactoryGirl.create(:comment, post: @post)
+      @post = FactoryBot.create(:post, author: @member)
+      @comment = FactoryBot.create(:comment, post: @post)
       @comment.update(updated_at: @comment.created_at)
       render partial: "comments/single", locals: { comment: @comment }
     end

@@ -1,5 +1,6 @@
 class HarvestsController < ApplicationController
-  before_action :authenticate_member!, except: [:index, :show]
+  before_action :authenticate_member!, except: %i(index show)
+  after_action :update_crop_medians, only: %i(create update destroy)
   load_and_authorize_resource
   respond_to :html, :json
   respond_to :csv, only: :index
@@ -17,6 +18,7 @@ class HarvestsController < ApplicationController
 
   def show
     @matching_plantings = matching_plantings if @harvest.owner == current_member
+    @photos = @harvest.photos.order(created_at: :desc).paginate(page: params[:page])
     respond_with(@harvest)
   end
 
@@ -33,6 +35,7 @@ class HarvestsController < ApplicationController
 
   def create
     @harvest.crop_id = @harvest.planting.crop_id if @harvest.planting_id
+    @harvest.harvested_at = Time.zone.now if @harvest.harvested_at.blank?
     @harvest.save
     respond_with(@harvest)
   end
@@ -71,8 +74,8 @@ class HarvestsController < ApplicationController
     elsif @planting
       @planting.harvests
     else
-      Harvest
-    end.joins(:owner, :crop).paginate(page: params[:page])
+      Harvest.all
+    end.order(harvested_at: :desc).joins(:owner, :crop).paginate(page: params[:page])
   end
 
   def csv_filename
@@ -82,5 +85,14 @@ class HarvestsController < ApplicationController
                   "#{@crop.name}-"
                 end
     "Growstuff-#{specifics}Harvests-#{Time.zone.now.to_s(:number)}.csv"
+  end
+
+  def update_crop_medians
+    # We only update medians to predict plantings
+    # if this harvest is not linked to a planting, then do nothing
+    return if @harvest.planting.nil?
+
+    @harvest.planting.update_harvest_days
+    @harvest.crop.update_harvest_medians
   end
 end

@@ -1,15 +1,3 @@
-## DEPRECATION NOTICE: Do not add new tests to this file!
-##
-## View and controller tests are deprecated in the Growstuff project.
-## We no longer write new view and controller tests, but instead write
-## feature tests (in spec/features) using Capybara (https://github.com/jnicklas/capybara).
-## These test the full stack, behaving as a browser, and require less complicated setup
-## to run. Please feel free to delete old view/controller tests as they are reimplemented
-## in feature tests.
-##
-## If you submit a pull request containing new view or controller tests, it will not be
-## merged.
-
 require 'rails_helper'
 
 describe PlantingsController do
@@ -17,91 +5,102 @@ describe PlantingsController do
 
   def valid_attributes
     {
-      garden_id: FactoryGirl.create(:garden, owner: subject.current_member).id,
-      crop_id: FactoryGirl.create(:crop).id
+      garden_id: FactoryBot.create(:garden, owner: subject.current_member).id,
+      crop_id: FactoryBot.create(:crop).id
     }
   end
 
   describe "GET index" do
-    before do
-      @member1 = FactoryGirl.create(:member)
-      @member2 = FactoryGirl.create(:member)
-      @tomato = FactoryGirl.create(:tomato)
-      @maize = FactoryGirl.create(:maize)
-      @planting1 = FactoryGirl.create(:planting, crop: @tomato, owner: @member1)
-      @planting2 = FactoryGirl.create(:planting, crop: @maize, owner: @member2)
+    let!(:member1) { FactoryBot.create(:member) }
+    let!(:member2) { FactoryBot.create(:member) }
+    let!(:tomato) { FactoryBot.create(:tomato) }
+    let!(:maize) { FactoryBot.create(:maize) }
+    let!(:planting1) { FactoryBot.create :planting, crop: tomato, owner: member1, created_at: 1.day.ago }
+    let!(:planting2) { FactoryBot.create :planting, crop: maize, owner: member2, created_at: 5.days.ago }
+
+    describe "assigns all plantings as @plantings" do
+      before { get :index, {} }
+      it { expect(assigns(:plantings)).to match [planting1, planting2] }
     end
 
-    it "assigns all plantings as @plantings" do
-      get :index, {}
-      assigns(:plantings).should =~ [@planting1, @planting2]
+    describe "picks up owner from params and shows owner's plantings only" do
+      before { get :index, owner: member1.slug }
+      it { expect(assigns(:owner)).to eq member1 }
+      it { expect(assigns(:plantings)).to eq [planting1] }
     end
 
-    it "picks up owner from params and shows owner's plantings only" do
-      get :index, owner: @member1.slug
-      assigns(:owner).should eq @member1
-      assigns(:plantings).should eq [@planting1]
-    end
-
-    it "picks up crop from params and shows the plantings for the crop only" do
-      get :index, crop: @maize.name
-      assigns(:crop).should eq @maize
-      assigns(:plantings).should eq [@planting2]
+    describe "picks up crop from params and shows the plantings for the crop only" do
+      before { get :index, crop: maize.name }
+      it { expect(assigns(:crop)).to eq maize }
+      it { expect(assigns(:plantings)).to eq [planting2] }
     end
   end
 
   describe "GET new" do
-    it "picks up crop from params" do
-      crop = FactoryGirl.create(:crop)
-      get :new, crop_id: crop.id
-      assigns(:crop).should eq(crop)
+    describe "picks up crop from params" do
+      let(:crop) { FactoryBot.create(:crop) }
+
+      before { get :new, crop_id: crop.id }
+      it { expect(assigns(:crop)).to eq(crop) }
     end
 
-    it "doesn't die if no crop specified" do
-      get :new, {}
-      assigns(:crop).should be_a_new(Crop)
+    describe "doesn't die if no crop specified" do
+      before { get :new, {} }
+      it { expect(assigns(:crop)).to be_a_new(Crop) }
     end
 
-    it "picks up member's garden from params" do
-      garden = FactoryGirl.create(:garden, owner: member)
-      get :new, garden_id: garden.id
-      assigns(:garden).should eq(garden)
+    describe "picks up member's garden from params" do
+      let(:garden) { FactoryBot.create(:garden, owner: member) }
+
+      before { get :new, garden_id: garden.id }
+      it { expect(assigns(:garden)).to eq(garden) }
     end
 
-    it "Doesn't display another member's garden on planting form" do
-      member = FactoryGirl.create(:member) # over-riding member from login_member()
-      garden = FactoryGirl.create(:garden, owner: member)
-      get :new, garden_id: garden.id
-      assigns(:garden).should_not eq(garden)
+    describe "Doesn't display another member's garden on planting form" do
+      let(:another_member) { FactoryBot.create(:member) } # over-riding member from login_member()
+      let(:garden) { FactoryBot.create(:garden, owner: another_member) }
+
+      before { get :new, garden_id: garden.id }
+      it { expect(assigns(:garden)).not_to eq(garden) }
     end
 
-    it "Doesn't display un-approved crops on planting form" do
-      crop = FactoryGirl.create(:crop, approval_status: 'pending')
-      FactoryGirl.create(:garden, owner: member)
-      get :new, crop_id: crop.id
-      assigns(:crop).should_not eq(crop)
+    describe "Doesn't display un-approved crops on planting form" do
+      let(:crop) { FactoryBot.create(:crop, approval_status: 'pending') }
+      let!(:garden) { FactoryBot.create(:garden, owner: member) }
+
+      before { get :new, crop_id: crop.id }
+      it { expect(assigns(:crop)).not_to eq(crop) }
     end
 
-    it "Doesn't display rejected crops on planting form" do
-      crop = FactoryGirl.create(:crop, approval_status: 'rejected', reason_for_rejection: 'nope')
-      FactoryGirl.create(:garden, owner: member)
-      get :new, crop_id: crop.id
-      assigns(:crop).should_not eq(crop)
+    describe "Doesn't display rejected crops on planting form" do
+      let(:crop) { FactoryBot.create(:crop, approval_status: 'rejected', reason_for_rejection: 'nope') }
+      let!(:garden) { FactoryBot.create(:garden, owner: member) }
+
+      before { get :new, crop_id: crop.id }
+      it { expect(assigns(:crop)).not_to eq(crop) }
     end
 
-    it "doesn't die if no garden specified" do
-      get :new, {}
-      assigns(:garden).should be_a_new(Garden)
+    describe "doesn't die if no garden specified" do
+      before { get :new, {} }
+      it { expect(assigns(:garden)).to be_a_new(Garden) }
     end
 
-    it "sets the date of the planting to today" do
-      get :new, {}
-      assigns(:planting).planted_at.should == Time.zone.today
+    describe "sets the date of the planting to today" do
+      before { get :new, {} }
+      it { expect(assigns(:planting).planted_at).to eq Time.zone.today }
     end
 
-    it "sets the owner automatically" do
-      post :create, planting: valid_attributes
-      assigns(:planting).owner.should eq subject.current_member
+    context 'with parent seed' do
+      let(:seed) { FactoryBot.create :seed, owner: member }
+      before { get :new, seed_id: seed.to_param }
+      it { expect(assigns(:seed)).to eq(seed) }
+    end
+  end
+
+  describe 'POST :create' do
+    describe "sets the owner automatically" do
+      before { post :create, planting: valid_attributes }
+      it { expect(assigns(:planting).owner).to eq subject.current_member }
     end
   end
 end

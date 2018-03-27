@@ -2,16 +2,16 @@ require 'rails_helper'
 
 feature "member deletion" do
   context "with activity and followers" do
-    let(:member) { FactoryGirl.create(:member) }
-    let(:other_member) { FactoryGirl.create(:member) }
-    let(:memberpost) { FactoryGirl.create(:post, author: member) }
-    let(:othermemberpost) { FactoryGirl.create(:post, author: other_member) }
-    let!(:planting) { FactoryGirl.create(:planting, owner: member) }
-    let!(:harvest) { FactoryGirl.create(:harvest, owner: member) }
-    let!(:seed) { FactoryGirl.create(:seed, owner: member) }
-    let!(:secondgarden) { FactoryGirl.create(:garden, owner: member) }
-    let!(:order) { FactoryGirl.create(:order, member: member, completed_at: Time.zone.now) }
-    let(:admin) { FactoryGirl.create(:admin_member) }
+    let(:member) { FactoryBot.create(:member) }
+    let(:other_member) { FactoryBot.create(:member) }
+    let(:memberpost) { FactoryBot.create(:post, author: member) }
+    let(:othermemberpost) { FactoryBot.create(:post, author: other_member) }
+    let!(:planting) { FactoryBot.create(:planting, owner: member) }
+    let!(:harvest) { FactoryBot.create(:harvest, owner: member) }
+    let!(:seed) { FactoryBot.create(:seed, owner: member) }
+    let!(:secondgarden) { FactoryBot.create(:garden, owner: member) }
+    let(:admin) { FactoryBot.create(:admin_member) }
+
     background do
       login_as(member)
       visit member_path(other_member)
@@ -22,12 +22,12 @@ feature "member deletion" do
       click_link 'Follow'
       logout
       login_as(member)
-      FactoryGirl.create(:comment, author: member, post: othermemberpost)
-      FactoryGirl.create(:comment, author: other_member, post: memberpost, body: "Fun comment-y thing")
+      FactoryBot.create(:comment, author: member, post: othermemberpost)
+      FactoryBot.create(:comment, author: other_member, post: memberpost, body: "Fun comment-y thing")
       # deletion breaks if no wranglers exist
-      FactoryGirl.create(:cropbot)
+      FactoryBot.create(:cropbot)
       # deletion breaks if ex_member doesn't exist
-      FactoryGirl.create(:member, login_name: "ex_member")
+      FactoryBot.create(:member, login_name: "ex_member")
     end
 
     scenario "has option to delete on member profile page" do
@@ -114,16 +114,6 @@ feature "member deletion" do
         expect(page).to have_content "Member Deleted"
       end
 
-      scenario "leaves a record of orders and payments intact" do
-        login_as(admin)
-        visit admin_path
-        fill_in "search_text", with: member.login_name.to_s
-        find("#maincontainer").click_button("Search", exact: true)
-        expect(page).to have_content member.login_name.to_s
-        expect(page).to have_content "Found 1 result"
-        logout
-      end
-
       scenario "can't be interesting" do
         expect(Member.interesting).not_to include(member)
         expect(Planting.interesting).not_to include(planting)
@@ -143,11 +133,11 @@ feature "member deletion" do
   end
 
   context "for a crop wrangler" do
-    let(:member) { FactoryGirl.create(:crop_wrangling_member) }
-    let(:otherwrangler) { FactoryGirl.create(:crop_wrangling_member) }
-    let(:crop) { FactoryGirl.create(:crop, creator: member) }
-    FactoryGirl.create(:cropbot)
-    let!(:ex_wrangler) { FactoryGirl.create(:crop_wrangling_member, login_name: "ex_wrangler") }
+    let(:member) { FactoryBot.create(:crop_wrangling_member) }
+    let(:otherwrangler) { FactoryBot.create(:crop_wrangling_member) }
+    let(:crop) { FactoryBot.create(:crop, creator: member) }
+    FactoryBot.create(:cropbot)
+    let!(:ex_wrangler) { FactoryBot.create(:crop_wrangling_member, login_name: "ex_wrangler") }
 
     scenario "leaves crops behind" do
       login_as(otherwrangler)

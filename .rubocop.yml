@@ -7,32 +7,40 @@ AllCops:
   Exclude:
     - 'db/schema.rb'
     - 'vendor/**/*'
+  TargetRailsVersion: 4.0
 
 Rails:
   Enabled: true
 
 Style/FileName:
   Exclude:
+    - 'Guardfile'
     - 'Gemfile'
     - 'Gemfile.lock'
 
 Style/StringLiterals:
   Enabled: false
 
-Style/MultilineMethodCallIndentation:
+# Stop hound and codeclimate fighting
+Style/PercentLiteralDelimiters:
+  PreferredDelimiters:
+    default: ()
+    '%i': ()
+    '%w': ()
+
+Layout/MultilineMethodCallIndentation:
   EnforcedStyle: indented
 
 # Configuration parameters: EnforcedStyle, SupportedStyles, IndentationWidth.
 # SupportedStyles: with_first_parameter, with_fixed_indentation
-Style/AlignParameters:
+Layout/AlignParameters:
   EnforcedStyle: with_fixed_indentation
 
 Metrics/LineLength:
   Max: 120
 
-
-# See https://github.com/bbatsov/rubocop/issues/3629
-Rails/HttpPositionalArguments:
+# turn these back on in Rails 5
+Rails/HttpPositionalArguments: # See https://github.com/bbatsov/rubocop/issues/3629
   Enabled: false
 
 Style/Documentation:
@@ -58,9 +66,9 @@ Metrics/BlockLength:
 Metrics/MethodLength:
   Max: 34
 Metrics/AbcSize:
-  Max: 32
+  Max: 31
 Metrics/ClassLength:
-  Max: 207
+  Max: 179
 Metrics/CyclomaticComplexity:
   Max: 11
 Metrics/PerceivedComplexity:

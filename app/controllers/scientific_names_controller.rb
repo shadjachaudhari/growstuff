@@ -1,5 +1,5 @@
 class ScientificNamesController < ApplicationController
-  before_action :authenticate_member!, except: [:index, :show]
+  before_action :authenticate_member!, except: %i(index show)
   load_and_authorize_resource
   respond_to :html, :json
   responders :flash
@@ -7,7 +7,7 @@ class ScientificNamesController < ApplicationController
   # GET /scientific_names
   # GET /scientific_names.json
   def index
-    @scientific_names = ScientificName.all
+    @scientific_names = ScientificName.all.order(:name)
     respond_with(@scientific_names)
   end
 

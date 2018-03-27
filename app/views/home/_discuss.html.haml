@@ -1,11 +1,11 @@
 %h2= t('.discussion')
 
-- posts = Post.limit(6)
+- posts = Post.order(created_at: :desc).limit(6)
 - if posts
-  = render partial: "posts/summary", locals: { posts: posts, howmany: 6 }
+  = render "posts/summary", posts: posts, howmany: 6
 
 - cache cache_key_for(Forum) do
-  - forums = Forum.all
+  - forums = Forum.all.order(:name)
   - if forums
     %ul.list-inline
       %li
