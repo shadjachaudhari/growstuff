@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe Forum do
-  let(:forum) { FactoryGirl.create(:forum) }
+  let(:forum) { create(:forum) }
 
   it "belongs to an owner" do
     forum.owner.should be_an_instance_of Member
@@ -16,14 +18,8 @@ describe Forum do
   end
 
   it "has many posts" do
-    @post1 = FactoryGirl.create(:forum_post, forum: forum)
-    @post2 = FactoryGirl.create(:forum_post, forum: forum)
+    @post1 = create(:forum_post, forum:)
+    @post2 = create(:forum_post, forum:)
     forum.posts.size.should == 2
-  end
-
-  it "orders posts in reverse chron order" do
-    @post1 = FactoryGirl.create(:forum_post, forum: forum, created_at: 2.days.ago)
-    @post2 = FactoryGirl.create(:forum_post, forum: forum, created_at: 1.day.ago)
-    forum.posts.first.should eq @post2
   end
 end

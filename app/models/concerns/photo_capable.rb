@@ -1,18 +1,32 @@
-require_relative '../../constants/photo_models.rb'
+# frozen_string_literal: true
+
 module PhotoCapable
   extend ActiveSupport::Concern
 
   included do
-    has_and_belongs_to_many :photos # rubocop:disable Rails/HasAndBelongsToMany
+    has_many :photo_associations, as: :photographable, dependent: :delete_all, inverse_of: :photographable
+    has_many :photos, through: :photo_associations, as: :photographable
 
-    before_destroy :remove_from_list
     scope :has_photos, -> { includes(:photos).where.not(photos: { id: nil }) }
-  end
 
-  def remove_from_list
-    photolist = photos.to_a # save a temp copy of the photo list
-    photos.clear # clear relationship b/w object and photo
+    def default_photo
+      most_liked_photo
+    end
 
-    photolist.each(&:destroy_if_unused)
+    def thumbnail_url
+      Rails.cache.fetch("#{cache_key_with_version}/thumbnail_url", expires_in: 8.hours) do
+        df = default_photo
+
+        if df
+          df.source == 'flickr' ? df.fullsize_url : df.thumbnail_url
+        elsif respond_to?(:crop) && crop.present?
+          crop.thumbnail_url
+        end
+      end
+    end
+
+    def most_liked_photo
+      photos.order(likes_count: :desc, created_at: :desc).first
+    end
   end
 end

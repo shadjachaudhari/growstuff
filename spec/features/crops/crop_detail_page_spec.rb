@@ -1,171 +1,205 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
-feature "crop detail page", js: true do
-  let(:crop) { create :crop }
+describe "crop detail page", :js do
+  subject do
+    # Update the medians after all the
+    # data has been loaded
+    crop.reload
+    crop.update_medians
 
-  subject { visit crop_path(crop) }
+    visit crop_path(crop)
+    page
+  end
+
+  before do
+    create(:plant_part, name: 'leaf')
+  end
+
+  let(:crop) { create(:crop) }
 
   context "varieties" do
-    scenario "The crop DOES NOT have varieties" do
+    it "The crop DOES NOT have varieties" do
       visit crop_path(crop)
-
-      within ".varieties" do
-        expect(page).to have_no_selector('li', text: /tomato/i)
-        expect(page).to have_no_selector('button', text: /Show+/i)
-      end
-    end
-
-    scenario "The crop has one variety" do
-      create :crop, name: 'Roma tomato 1', parent: crop
-
-      subject
-
-      within ".varieties" do
-        # It lists all 2 items (note: including the top level item.)
-        expect(page).to have_selector('li', text: /tomato/i, count: 2)
-        # It DOES NOT have "Show all/less" toggle link
-        expect(page).to have_no_selector('button', text: /Show+/i)
-      end
-    end
-
-    context "many" do
-      let!(:roma1) { create :crop, name: 'Roma tomato 1', parent: crop }
-      let!(:roma2) { create :crop, name: 'Roma tomato 2', parent: crop }
-      let!(:roma3) { create :crop, name: 'Roma tomato 3', parent: crop }
-      let!(:roma4) { create :crop, name: 'Roma tomato 4', parent: crop }
-
-      scenario "The crop has 4 varieties" do
-        subject
-
-        within ".varieties" do
-          # It lists all 5 items (note: including the top level item.)
-          expect(page).to have_selector('li', text: /tomato/i, count: 5)
-          # It DOES NOT have "Show all/less" toggle link
-          expect(page).to have_no_selector('button', text: /Show+/i)
-        end
-      end
-
-      scenario "The crop has 5 varieties, including grandchild", js: true do
-        create :crop, name: 'Roma tomato child 1', parent: roma4
-
-        subject
-
-        within ".varieties" do
-          # It lists the first 5 items (note: including the top level item.)
-          # It HAS have "Show all" toggle link but not "Show less" link
-          expect(page).to have_selector('li', text: /tomato/i, count: 5)
-          expect(page).to have_selector('li', text: 'Roma tomato 4')
-          expect(page).to have_no_selector('li', text: 'Roma tomato child 1')
-          # It shows the total number (5) correctly
-          expect(page).to have_selector('button', text: /Show all 5 +/i)
-          expect(page).to have_no_selector('button', text: /Show less+/i)
-
-          # Clik "Show all" link
-          page.find('button', text: /Show all+/).click
-
-          # It lists all 6 items (note: including the top level item.)
-          # It HAS have "Show less" toggle link but not "Show all" link
-          expect(page).to have_selector('li', text: /tomato/i, count: 6)
-          expect(page).to have_selector('li', text: 'Roma tomato 4')
-          expect(page).to have_selector('li', text: 'Roma tomato child 1')
-          expect(page).to have_no_selector('button', text: /Show all+/i)
-          expect(page).to have_selector('button', text: /Show less+/i)
-
-          # Clik "Show less" link
-          page.find('button', text: /Show less+/).click
-
-          # It lists 5 items (note: including the top level item.)
-          # It HAS have "Show all" toggle link but not "Show less" link
-          expect(page).to have_selector('li', text: /tomato/i, count: 5)
-          expect(page).to have_selector('li', text: 'Roma tomato 4')
-          expect(page).to have_no_selector('li', text: 'Roma tomato child 1')
-          expect(page).to have_selector('button', text: /Show all 5 +/i)
-          expect(page).to have_no_selector('button', text: /Show less+/i)
-        end
-      end
+      expect(page).to have_no_text 'Varieties'
     end
   end
 
-  context "signed in member" do
-    let(:member) { create :member }
-
-    background do
-      login_as(member)
-    end
-
+  context 'signed in' do
+    include_context "signed in member"
     context "action buttons" do
-      background { subject }
+      before { subject }
 
-      scenario "has a link to plant the crop" do
-        expect(page).to have_link "Plant this", href: new_planting_path(crop_id: crop.id)
+      it "has a link to plant the crop" do
+        click_link 'Add to my garden'
+        expect(page).to have_link "add new garden"
       end
-      scenario "has a link to harvest the crop" do
-        expect(page).to have_link "Harvest this", href: new_harvest_path(crop_id: crop.id)
+
+      it "has a link to harvest the crop" do
+        click_link 'Record harvest'
+        expect(page).to have_link "leaf"
       end
-      scenario "has a link to add seeds" do
-        expect(page).to have_link "Add seeds to stash", href: new_seed_path(crop_id: crop.id)
+
+      describe "Saving seeds" do
+        before { click_link 'Save seeds' }
+
+        it { expect(page).to have_text "Will you offer these seeds for trade?" }
+        it { expect(page).to have_button "locally" }
+        it { expect(page).to have_button "nationally" }
+        it { expect(page).to have_button "internationally" }
+        it { expect(page).to have_button "Save #{crop.name} seeds." }
       end
     end
 
     context "SEO" do
-      background { subject }
+      before { subject }
 
-      scenario "has seed heading with SEO" do
+      it "has seed heading with SEO" do
         expect(page).to have_content "Find #{crop.name} seeds"
       end
 
-      scenario "has harvest heading with SEO" do
+      it "has harvest heading with SEO" do
         expect(page).to have_content "#{crop.name.capitalize} harvests"
       end
 
-      scenario "has planting heading with SEO" do
+      it "has planting heading with SEO" do
         expect(page).to have_content "See who's planted #{crop.name.pluralize}"
       end
 
-      scenario "has planting advice with SEO" do
+      it "has planting advice with SEO" do
         expect(page).to have_content "How to grow #{crop.name}"
       end
 
-      scenario "has a link to Wikipedia with SEO" do
+      it "has a link to Wikipedia with SEO" do
         expect(page).to have_content "Learn more about #{crop.name}"
         expect(page).to have_link "Wikipedia (English)", href: crop.en_wikipedia_url
       end
 
-      scenario "has a link to OpenFarm" do
-        expect(page).to have_link "OpenFarm - Growing guide",
-          href: "https://openfarm.cc/en/crops/#{URI.escape crop.name}"
-      end
-
-      scenario "has a link to gardenate" do
+      it "has a link to gardenate" do
         expect(page).to have_link "Gardenate - Planting reminders",
-          href: "http://www.gardenate.com/plant/#{URI.escape crop.name}"
+                                  href: "https://www.gardenate.com/plant/#{CGI.escape crop.name}"
       end
     end
   end
 
   context "seed quantity for a crop" do
-    let(:member) { create :member }
-    let(:seed) { create :seed, crop: crop, quantity: 20, owner: member }
+    let(:seed)   { create(:seed, crop:, quantity: 20) }
 
-    scenario "User not signed in" do
+    it "User not signed in" do
       visit crop_path(seed.crop)
-      expect(page).to_not have_content "You have 20 seeds of this crop"
-      expect(page).to_not have_content "You don't have any seeds of this crop"
-      expect(page).to_not have_link "View your seeds"
+      expect(page).to have_no_content "You have 20 seeds"
     end
 
-    scenario "User signed in" do
-      login_as(member)
-      visit crop_path(seed.crop)
-      expect(page).to have_content "You have 20 seeds of this crop."
-      expect(page).to have_link "View your seeds"
+    context 'signed in' do
+      include_context 'signed in member'
+      before { seed.update! owner: member }
+
+      it "User signed in" do
+        visit crop_path(seed.crop)
+        expect(page).to have_link "You have 20 seeds of this crop."
+      end
+
+      it "click link to your owned seeds" do
+        visit crop_path(seed.crop)
+        click_link "You have 20 seeds of this crop."
+        expect(page).to have_current_path member_seeds_path(member_slug: member.slug), ignore_query: true
+      end
+    end
+  end
+
+  shared_examples "predicts harvest" do
+    describe 'with harvest history data' do
+      before do
+        # 50 days to harvest
+        create(:harvest, harvested_at: 150.days.ago, crop:,
+                                    planting: create(:planting, planted_at: 200.days.ago, crop:))
+        # 20 days to harvest
+        create(:harvest, harvested_at: 180.days.ago, crop:,
+                                    planting: create(:planting, planted_at: 200.days.ago, crop:))
+        # 10 days to harvest
+        create(:harvest, harvested_at: 190.days.ago, crop:,
+                                    planting: create(:planting, planted_at: 200.days.ago, crop:))
+        crop.update_medians
+      end
+
+      it "predicts harvest" do
+        expect(subject).to have_text("First harvest expected 3 weeks after planting")
+      end
+    end
+  end
+
+  context 'predictions' do
+    let!(:planting) do
+      create(:planting, crop:,
+                        planted_at:  100.days.ago,
+                        finished_at: 1.day.ago)
     end
 
-    scenario "click link to your owned seeds" do
-      login_as(member)
-      visit crop_path(seed.crop)
-      click_link "View your seeds"
-      expect(current_path).to eq seeds_by_owner_path(owner: member.slug)
+    context 'crop is an Annual' do
+      let(:crop) { create(:annual_crop) }
+
+      describe 'with harvests' do
+        it_behaves_like "predicts harvest"
+      end
+
+      it "predicts lifespan" do
+        expect(subject).to have_text "Median lifespan"
+        expect(subject).to have_text "14 weeks"
+      end
+
+      it "describes Annual crops" do
+        expect(subject).to have_text("living and reproducing in a single year or less")
+        expect(subject).to have_text('Annual')
+      end
+    end
+
+    context 'crop is Perennial' do
+      let(:crop) { create(:perennial_crop) }
+
+      describe 'with harvests' do
+        it_behaves_like "predicts harvest"
+      end
+
+      it "describes Perennial crops" do
+        expect(subject).to have_text("Perennial")
+        expect(subject).to have_text("living more than two years")
+      end
+    end
+
+    context 'crop Perennial value is null' do
+      let(:crop) { create(:crop, perennial: nil) }
+
+      describe 'with harvests' do
+        it_behaves_like "predicts harvest"
+      end
+    end
+  end
+
+  context 'Annual and Perennial' do
+    before { visit crop_path(crop) }
+
+    context 'crop is an Annual' do
+      let(:crop) { create(:annual_crop) }
+
+      it { expect(page).to have_text 'Annual' }
+      it { expect(page).to have_text 'living and reproducing in a single year or less' }
+      it { expect(page).to have_no_text 'Perennial' }
+    end
+
+    context 'crop is Perennial' do
+      let(:crop) { create(:perennial_crop) }
+
+      it { expect(find('.index-cards.facts')).to have_text 'Perennial' }
+      it { expect(page).to have_text 'living more than two years' }
+      it { expect(page).to have_no_text 'Annual' }
+    end
+
+    context 'crop Perennial value is null' do
+      let(:crop) { create(:crop, perennial: nil) }
+
+      it { expect(find('.index-cards.facts')).to have_no_text 'Perennial' }
+      it { expect(page).to have_no_text 'Annual' }
     end
   end
 end

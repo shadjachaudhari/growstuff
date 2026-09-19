@@ -1,5 +1,7 @@
-class AddCreationIndexToUpdates < ActiveRecord::Migration
+# frozen_string_literal: true
+
+class AddCreationIndexToUpdates < ActiveRecord::Migration[4.2]
   def change
-    add_index :updates, [:created_at, :user_id]
+    add_index :updates, %i(created_at user_id)
   end
 end

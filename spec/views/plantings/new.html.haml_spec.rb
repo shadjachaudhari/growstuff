@@ -1,45 +1,35 @@
-## DEPRECATION NOTICE: Do not add new tests to this file!
-##
-## View and controller tests are deprecated in the Growstuff project.
-## We no longer write new view and controller tests, but instead write
-## feature tests (in spec/features) using Capybara (https://github.com/jnicklas/capybara).
-## These test the full stack, behaving as a browser, and require less complicated setup
-## to run. Please feel free to delete old view/controller tests as they are reimplemented
-## in feature tests.
-##
-## If you submit a pull request containing new view or controller tests, it will not be
-## merged.
+# frozen_string_literal: true
 
 require 'rails_helper'
 
 describe "plantings/new" do
-  before(:each) do
-    @member = FactoryGirl.create(:member)
+  before do
+    @member = create(:member)
     controller.stub(:current_user) { @member }
 
     # create gardens and crops to populate dropdowns
-    @garden_a = FactoryGirl.create(:garden, owner: @member)
-    @garden_z = FactoryGirl.create(:garden, owner: @member)
-    @crop1 = FactoryGirl.create(:tomato)
-    @crop2 = FactoryGirl.create(:maize)
+    @garden_a = create(:garden, owner: @member)
+    @garden_z = create(:garden, owner: @member)
+    @crop1 = create(:tomato)
+    @crop2 = create(:maize)
+    @planting = create(:planting,
+                       garden: @garden_a, crop: @crop2, owner: @member)
 
-    assign(:planting, FactoryGirl.create(:planting,
-      garden: @garden_a,
-      crop: @crop2))
+    assign(:planting, @planting)
   end
 
   context "logged in" do
-    before(:each) do
+    before do
       sign_in @member
-      assign(:planting, Planting.new)
+      planting = Planting.new(garden: @garden_z, owner: @member)
+      assign(:planting, planting)
       assign(:crop, @crop2)
-      assign(:garden, @garden_z)
       render
     end
 
     it "renders new planting form" do
       assert_select "form", action: plantings_path, method: "post" do
-        assert_select "select#planting_garden_id", name: "planting[garden_id]"
+        assert_select "input#planting_garden_id_#{@garden_z.id}", name: "planting[garden_id]"
         assert_select "input#crop", class: "ui-autocomplete-input"
         assert_select "input#planting_crop_id", name: "planting[crop_id]"
         assert_select "input#planting_quantity", name: "planting[quantity]"
@@ -54,8 +44,8 @@ describe "plantings/new" do
     end
 
     it "selects a garden given in a param" do
-      assert_select "select#planting_garden_id",
-        html: /option selected value="#{@garden_z.id}"/
+      assert_select "input", id: "planting_garden_id_#{@garden_z.id}",
+                             type: 'radio', value: @garden_z.id, checked: "checked"
     end
   end
 end

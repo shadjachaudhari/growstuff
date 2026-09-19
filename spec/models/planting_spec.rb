@@ -1,46 +1,271 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe Planting do
-  let(:crop) { FactoryGirl.create(:tomato) }
-  let(:garden_owner) { FactoryGirl.create(:member) }
-  let(:garden) { FactoryGirl.create(:garden, owner: garden_owner) }
-  let(:planting) { FactoryGirl.create(:planting, crop: crop, garden: garden) }
-  let(:finished_planting) { FactoryGirl.create :planting, planted_at: 4.days.ago, finished_at: 2.days.ago }
+  let(:crop)         { create(:tomato)                                                            }
+  let(:garden_owner) { create(:member, login_name: 'hatupatu')                                    }
+  let(:garden)       { create(:garden, owner: garden_owner, name: 'Springfield Community Garden') }
+  let(:planting)     { create(:planting, crop:, garden:, owner: garden.owner) }
 
-  describe 'maturity calculations' do
-    describe 'start_to_finish_diff' do
-      it { expect(finished_planting.start_to_finish_diff).to eq(2) }
+  describe 'planting lifespan predictions' do
+    context 'no predications data yet' do
+      describe 'planting planted, not finished' do
+        let(:planting) { create(:planting, planted_at: 30.days.ago, finished_at: nil, finished: false) }
+
+        it { expect(planting.crop.median_lifespan).to be_nil }
+        it { expect(planting.expected_lifespan).to be_nil }
+        it { expect(planting.age_in_days).to eq(30) }
+        it { expect(planting.percentage_grown).to be_nil }
+      end
+
+      describe 'planting not planted yet' do
+        let(:planting) { create(:planting, planted_at: nil, finished_at: nil, finished: false) }
+
+        it { expect(planting.crop.median_lifespan).to be_nil }
+        it { expect(planting.expected_lifespan).to be_nil }
+        it { expect(planting.age_in_days).to be_nil }
+        it { expect(planting.percentage_grown).to eq(0) }
+      end
+
+      describe 'planting finished, no planted_at' do
+        let(:planting) { create(:planting, planted_at: nil, finished_at: 1.day.ago, finished: true) }
+
+        it { expect(planting.crop.median_lifespan).to be_nil }
+        it { expect(planting.expected_lifespan).to be_nil }
+        it { expect(planting.age_in_days).to be_nil }
+        it { expect(planting.percentage_grown).to eq(100) }
+      end
+
+      describe 'planting all finished' do
+        let(:planting) { create(:planting, planted_at: 30.days.ago, finished_at: 10.days.ago, finished: true) }
+
+        it { expect(planting.crop.median_lifespan).to be_nil }
+        it { expect(planting.expected_lifespan).to eq(20) }
+        it { expect(planting.age_in_days).to eq(20) }
+        it { expect(planting.percentage_grown).to eq(100) }
+      end
+
+      describe 'planting finishing in the future' do
+        let(:planting) { create(:planting, planted_at: 30.days.ago, finished_at: 10.days.from_now, finished: false) }
+
+        it { expect(planting.expected_lifespan).to eq(40) }
+        it { expect(planting.age_in_days).to eq(30) }
+        it { expect(planting.percentage_grown).to eq(75) }
+      end
     end
 
-    describe 'other_finished_plantings_same_crop' do
+    context 'lots of data' do
       before do
-        # eight finished plantings
-        8.times { FactoryGirl.create :planting, crop: crop, planted_at: 10.days.ago, finished_at: 2.days.ago }
-        # eight not finished plantings
-        8.times { FactoryGirl.create :planting, crop: crop, finished_at: nil }
+        create(:planting, crop: planting.crop, planted_at: 10.days.ago)
+        create(:planting, crop: planting.crop, planted_at: 100.days.ago, finished_at: 50.days.ago)
+        create(:planting, crop: planting.crop, planted_at: 100.days.ago, finished_at: 51.days.ago)
+        create(:planting, crop: planting.crop, planted_at: 2.years.ago, finished_at: 50.days.ago)
+        create(:planting, crop: planting.crop, planted_at: 150.days.ago, finished_at: 100.days.ago)
+        planting.crop.update_lifespan_medians
       end
-      let!(:planting_with_diff_crop) { FactoryGirl.create :planting, planted_at: 10.days.ago, finished_at: 2.days.ago }
-      let(:planting_predictions) { PlantingPredictions.new(planting) }
-      it { expect(planting_predictions.send(:other_finished_plantings_same_crop).size).to eq(8) }
-      it { expect(planting_predictions.send(:other_finished_plantings_same_crop)).not_to include(planting) }
-      it do
-        expect(planting_predictions.send(:other_finished_plantings_same_crop))
-          .not_to include(planting_with_diff_crop)
+
+      it { expect(planting.crop.median_lifespan).to eq 50 }
+
+      describe 'planting 30 days ago, not finished' do
+        let(:planting) { create(:planting, planted_at: 30.days.ago) }
+
+        # 30 / 50 = 60%
+        it { expect(planting.percentage_grown).to eq 60.0 }
+        # planted 30 days ago
+        it { expect(planting.age_in_days).to eq 30 }
+        # means 20 days to go
+        it { expect(planting.finish_predicted_at).to eq Time.zone.today + 20.days }
+      end
+
+      describe 'child crop uses parent data' do
+        let(:child_crop)     { create(:crop, parent: crop, name: 'child')                   }
+        let(:child_planting) { create(:planting, crop: child_crop, planted_at: 30.days.ago) }
+
+        # not data for this crop
+        it { expect(child_crop.median_lifespan).to be_nil }
+        # 30 / 50 = 60%
+        it { expect(child_planting.percentage_grown).to eq 60.0 }
+        # planted 30 days ago
+        it { expect(child_planting.age_in_days).to eq 30 }
+        # means 20 days to go
+        it { expect(child_planting.finish_predicted_at).to eq Time.zone.today + 20.days }
+      end
+
+      describe 'planting not planted yet' do
+        let(:planting) { create(:planting, planted_at: nil, finished_at: nil) }
+
+        it { expect(planting.percentage_grown).to eq 0 }
+      end
+
+      describe 'planting finished 10 days, but was never planted' do
+        let(:planting) { create(:planting, planted_at: nil, finished_at: 10.days.ago) }
+
+        it { expect(planting.percentage_grown).to eq 100 }
+      end
+
+      describe 'planted 30 days ago, finished 10 days ago' do
+        let(:planting) { create(:planting, planted_at: 30.days.ago, finished_at: 10.days.ago) }
+
+        it { expect(planting.age_in_days).to eq 20 }
+        it { expect(planting.percentage_grown).to eq 100 }
+      end
+    end
+  end
+
+  describe 'planting first harvest preductions' do
+    context 'no data' do
+      let(:planting) { create(:planting) }
+
+      it { expect(planting.crop.median_days_to_first_harvest).to be_nil }
+      it { expect(planting.crop.median_days_to_last_harvest).to be_nil }
+      it { expect(planting.days_to_first_harvest).to be_nil }
+      it { expect(planting.days_to_last_harvest).to be_nil }
+      it { expect(planting.expected_lifespan).to be_nil }
+    end
+
+    context 'lots of data' do
+      let(:crop) { create(:crop) }
+      # this is a method so it creates a new one each time
+
+      def one_hundred_day_old_planting
+        create(:planting, crop:, planted_at: 100.days.ago)
+      end
+      before do
+        # 50 days to harvest
+        create(:harvest, harvested_at: 50.days.ago, crop: planting.crop,
+                                    planting: one_hundred_day_old_planting)
+        # 20 days to harvest
+        create(:harvest, harvested_at: 80.days.ago, crop: planting.crop,
+                                    planting: one_hundred_day_old_planting)
+        # 10 days to harvest
+        create(:harvest, harvested_at: 90.days.ago, crop: planting.crop,
+                                    planting: one_hundred_day_old_planting)
+
+        planting.crop.plantings.each(&:update_harvest_days!)
+        planting.crop.update_lifespan_medians
+        planting.crop.update_harvest_medians
+      end
+
+      it { expect(crop.median_days_to_first_harvest).to eq(20) }
+
+      describe 'sets median time to harvest' do
+        let(:planting) { create(:planting, crop:, planted_at: Time.zone.today) }
+
+        it { expect(planting.first_harvest_predicted_at).to eq(Time.zone.today + 20.days) }
+      end
+
+      describe 'harvest still growing' do
+        let(:planting) { create(:planting, crop:, planted_at: Time.zone.today) }
+
+        it { expect(planting.before_harvest_time?).to be true }
+        it { expect(planting.harvest_time?).to be false }
+      end
+
+      describe 'harvesting ready now' do
+        let(:planting) { create(:planting, crop:, planted_at: 21.days.ago) }
+
+        it { expect(planting.first_harvest_predicted_at).to eq(1.day.ago.to_date) }
+        it { expect(planting.before_harvest_time?).to be false }
+        it { expect(planting.harvest_time?).to be true }
       end
     end
 
-    describe 'mean_days_until_maturity' do
-      let(:plantings) do
-        FactoryGirl.create_list(:planting, 10, crop: crop, planted_at: 12.days.ago, finished_at: 2.days.ago)
+    describe 'planting has no harvests' do
+      let(:planting) { create(:planting) }
+
+      before do
+        planting.update_harvest_days!
+        planting.crop.update_harvest_medians
       end
-      it { expect(plantings.size).to eq(10) }
-      it { expect(PlantingPredictions.mean_days_until_maturity(plantings)).to eq(10) }
+
+      it { expect(planting.days_to_first_harvest).to be_nil }
+      it { expect(planting.days_to_last_harvest).to be_nil }
     end
 
-    describe 'saving planting calculates days_before_maturity' do
-      before { 5.times { FactoryGirl.create :planting, planted_at: 30.days.ago, finished_at: 9.days.ago, crop: crop } }
-      before { planting.calc_and_set_days_before_maturity }
-      it { expect(planting.days_before_maturity).to eq(21) }
+    describe 'planting has first harvest' do
+      let(:planting) { create(:planting, planted_at: 100.days.ago) }
+
+      before do
+        create(:harvest,
+               planting:,
+               crop:         planting.crop,
+               harvested_at: 10.days.ago)
+        planting.update_harvest_days!
+        planting.crop.update_harvest_medians
+      end
+
+      it { expect(planting.days_to_first_harvest).to eq(90) }
+      it { expect(planting.days_to_last_harvest).to be_nil }
+      it { expect(planting.crop.median_days_to_first_harvest).to eq(90) }
+      it { expect(planting.crop.median_days_to_last_harvest).to be_nil }
+    end
+
+    describe 'planting has last harvest' do
+      let(:planting) { create(:planting, planted_at: 100.days.ago, finished_at: 1.day.ago, finished: true) }
+
+      before do
+        create(:harvest, planting:, crop: planting.crop, harvested_at: 90.days.ago)
+        create(:harvest, planting:, crop: planting.crop, harvested_at: 10.days.ago)
+        planting.update_harvest_days!
+        planting.crop.update_harvest_medians
+      end
+
+      it { expect(planting.days_to_first_harvest).to eq(10) }
+      it { expect(planting.days_to_last_harvest).to eq(90) }
+      it { expect(planting.crop.median_days_to_first_harvest).to eq(10) }
+      it { expect(planting.crop.median_days_to_last_harvest).to eq(90) }
+    end
+  end
+
+  describe 'planting perennial' do
+    let(:crop) { create(:crop, name: 'feijoa', perennial: true) }
+
+    it { expect(planting.perennial?).to be true }
+
+    describe 'no harvest to predict from' do
+      it { expect(planting.harvest_months).to eq({}) }
+    end
+
+    describe 'harvests used to predict' do
+      before do
+        create(:harvest, planting:, crop:, harvested_at: '1 May 2019')
+        create(:harvest, planting:, crop:, harvested_at: '18 June 2019')
+        create_list(:harvest, 4, planting:, crop:, harvested_at: '18 August 2019')
+      end
+
+      it { expect(planting.harvest_months).to eq(5 => 1, 6 => 1, 8 => 4) }
+    end
+
+    describe 'nearby plantings used to predict' do
+      # Note the locations used need to be stubbed in geocoder
+      let(:garden) { create(:garden, location: 'Edinburgh', owner: garden_owner) }
+
+      before do
+        # Near by planting with harvests
+        nearby_garden = create(:garden, location: 'Greenwich, UK')
+        nearby_planting = create(:planting,
+                                 crop:,
+                                 garden:     nearby_garden,
+                                 owner:      nearby_garden.owner,
+                                 planted_at: '1 January 2000')
+        create(:harvest, planting: nearby_planting, crop:,
+                                    harvested_at: '1 May 2019')
+        create(:harvest, planting: nearby_planting, crop:,
+                                    harvested_at: '18 June 2019')
+        create_list(:harvest, 4, planting: nearby_planting, crop:,
+                                            harvested_at: '18 August 2008')
+
+        # far away planting harvests
+        faraway_garden = create(:garden, location: 'Amundsen-Scott Base, Antarctica')
+        faraway_planting = create(:planting, garden: faraway_garden, crop:,
+                                                        owner: faraway_garden.owner, planted_at: '16 May 2001')
+
+        create_list(:harvest, 4, planting: faraway_planting, crop:,
+                                            harvested_at: '18 December 2006')
+      end
+
+      it { expect(planting.harvest_months).to eq(5 => 1, 6 => 1, 8 => 4) }
     end
   end
 
@@ -48,78 +273,33 @@ describe Planting do
     planting.owner.should be_an_instance_of Member
   end
 
-  it "owner isn't necessarily the garden owner" do
-    # a new owner should be created automatically by FactoryGirl
-    # note that formerly, the planting belonged to an owner through the garden
-    planting.owner.should_not eq garden_owner
-  end
-
   it "generates a location" do
-    planting.location.should eq "#{garden_owner.login_name}'s #{garden.name}"
+    planting.location.should eq garden.location
   end
 
-  it "sorts plantings in descending order of creation" do
-    @planting1 = FactoryGirl.create(:planting)
-    @planting2 = FactoryGirl.create(:planting)
-    Planting.first.should eq @planting2
+  it "has a slug" do
+    planting.slug.should match(/^hatupatu-springfield-community-garden-tomato$/)
   end
 
-  it "should have a slug" do
-    planting.slug.should match /^member\d+-springfield-community-garden-tomato$/
-  end
-
-  it 'should sort in reverse creation order' do
-    @planting2 = FactoryGirl.create(:planting)
-    Planting.first.should eq @planting2
+  it 'sorts in reverse creation order' do
+    @planting2 = create(:planting)
+    described_class.first.should eq @planting2
   end
 
   describe '#planted?' do
-    it "should be false for future plantings" do
-      planting = FactoryGirl.create :planting, planted_at: Time.zone.today + 1
-      expect(planting.planted?).to eq(false)
-    end
-    it "should be false for never planted" do
-      planting = FactoryGirl.create :planting, planted_at: nil
-      expect(planting.planted?).to eq(false)
-    end
-    it "should be true for past plantings" do
-      planting = FactoryGirl.create :planting, planted_at: Time.zone.today - 1
-      expect(planting.planted?).to eq(true)
-    end
-  end
-
-  describe '#percentage_grown' do
-    it 'should not be more than 100%' do
-      @planting = FactoryGirl.build(:planting, days_before_maturity: 1, planted_at: 1.day.ago)
-
-      Timecop.freeze(2.days.from_now) do
-        @planting.percentage_grown.should be 100
-      end
+    it "is false for future plantings" do
+      planting = create(:planting, planted_at: Time.zone.today + 1)
+      expect(planting.planted?).to be(false)
     end
 
-    it 'should not be less than 0%' do
-      @planting = FactoryGirl.build(:planting, days_before_maturity: 1, planted_at: 1.day.ago)
-
-      Timecop.freeze(2.days.ago) do
-        @planting.percentage_grown.should be nil
-      end
+    it "is false for never planted" do
+      planting = create(:planting, planted_at: nil)
+      expect(planting.planted?).to be(false)
     end
 
-    it 'should reflect the current growth' do
-      @planting = FactoryGirl.build(:planting, days_before_maturity: 10, planted_at: 4.days.ago)
-      expect(@planting.percentage_grown).to eq 40
-    end
-
-    it 'should not be calculated for unplanted plantings' do
-      @planting = FactoryGirl.build(:planting, planted_at: nil)
-
-      @planting.planted?.should be false
-      @planting.percentage_grown.should be nil
-    end
-
-    it 'should not be calculated for plantings with an unknown days before maturity' do
-      @planting = FactoryGirl.build(:planting, days_before_maturity: nil)
-      @planting.percentage_grown.should be nil
+    it "is true for past plantings" do
+      planting = create(:planting, planted_at: Time.zone.today - 1)
+      expect(planting.planted?).to be(true)
     end
   end
 
@@ -143,66 +323,68 @@ describe Planting do
 
   context 'quantity' do
     it 'allows integer quantities' do
-      @planting = FactoryGirl.build(:planting, quantity: 99)
+      @planting = build(:planting, quantity: 99)
       @planting.should be_valid
     end
 
     it "doesn't allow decimal quantities" do
-      @planting = FactoryGirl.build(:planting, quantity: 99.9)
+      @planting = build(:planting, quantity: 99.9)
       @planting.should_not be_valid
     end
 
     it "doesn't allow non-numeric quantities" do
-      @planting = FactoryGirl.build(:planting, quantity: 'foo')
+      @planting = build(:planting, quantity: 'foo')
       @planting.should_not be_valid
     end
 
     it "allows blank quantities" do
-      @planting = FactoryGirl.build(:planting, quantity: nil)
+      @planting = build(:planting, quantity: nil)
       @planting.should be_valid
-      @planting = FactoryGirl.build(:planting, quantity: '')
+      @planting = build(:planting, quantity: '')
       @planting.should be_valid
     end
   end
 
   context 'sunniness' do
-    let(:planting) { FactoryGirl.create(:sunny_planting) }
+    let(:planting) { create(:sunny_planting) }
 
-    it 'should have a sunniness value' do
+    it 'has a sunniness value' do
       planting.sunniness.should eq 'sun'
     end
 
     it 'all three valid sunniness values should work' do
       ['sun', 'shade', 'semi-shade', nil, ''].each do |s|
-        @planting = FactoryGirl.build(:planting, sunniness: s)
+        @planting = build(:planting, sunniness: s)
         @planting.should be_valid
       end
     end
 
-    it 'should refuse invalid sunniness values' do
-      @planting = FactoryGirl.build(:planting, sunniness: 'not valid')
+    it 'refuses invalid sunniness values' do
+      @planting = build(:planting, sunniness: 'not valid')
       @planting.should_not be_valid
       @planting.errors[:sunniness].should include("not valid is not a valid sunniness value")
     end
   end
 
   context 'planted from' do
-    it 'should have a planted_from value' do
-      @planting = FactoryGirl.create(:seed_planting)
+    it 'has a planted_from value' do
+      @planting = create(:seed_planting)
       @planting.planted_from.should eq 'seed'
     end
 
     it 'all valid planted_from values should work' do
-      ['seed', 'seedling', 'cutting', 'root division',
-       'runner', 'bare root plant', 'advanced plant',
-       'graft', 'layering', 'bulb', 'root/tuber', nil, ''].each do |p|
-        @planting = FactoryGirl.build(:planting, planted_from: p)
+      [
+        'seed', 'seedling', 'cutting', 'root division',
+        'runner', 'bare root plant', 'advanced plant',
+        'graft', 'layering', 'bulb', 'root/tuber', nil, ''
+      ].each do |p|
+        @planting = build(:planting, planted_from: p)
         @planting.should be_valid
       end
     end
 
-    it 'should refuse invalid planted_from values' do
-      @planting = FactoryGirl.build(:planting, planted_from: 'not valid')
+    it 'refuses invalid planted_from values' do
+      @planting = build(:planting, planted_from: 'not valid')
       @planting.should_not be_valid
       @planting.errors[:planted_from].should include("not valid is not a valid planting method")
     end
@@ -211,148 +393,236 @@ describe Planting do
   # we decided that all the tests for the planting/photo association would
   # be done on this side, not on the photos side
   context 'photos' do
-    let(:planting) { FactoryGirl.create(:planting) }
-    let(:photo) { FactoryGirl.create(:photo) }
+    let(:planting) { create(:planting) }
+    let(:photo) { create(:photo, owner_id: planting.owner_id) }
 
-    before do
-      planting.photos << photo
-    end
+    before { planting.photos << photo }
 
     it 'has a photo' do
-      planting.photos.first.should eq photo
+      expect(planting.photos.first).to eq photo
     end
 
     it 'is found in has_photos scope' do
-      Planting.has_photos.should include(planting)
+      expect(described_class.has_photos).to include(planting)
     end
 
     it 'deletes association with photos when photo is deleted' do
       photo.destroy
       planting.reload
-      planting.photos.should be_empty
+      expect(planting.photos).to be_empty
     end
 
     it 'has a default photo' do
-      planting.default_photo.should eq photo
+      expect(planting.default_photo).to eq photo
     end
 
     it 'chooses the most recent photo' do
-      @photo2 = FactoryGirl.create(:photo)
+      @photo2 = create(:photo, owner: planting.owner)
       planting.photos << @photo2
-      planting.default_photo.should eq @photo2
+      expect(planting.default_photo).to eq @photo2
+    end
+
+    describe '#thumbnail_url' do
+      let(:crop_photo) { create(:photo) }
+
+      it 'returns its own default photo if present' do
+        expect(planting.thumbnail_url).to eq photo.fullsize_url
+      end
+
+      it 'falls back to crop default photo if no planting photo is present' do
+        planting_without_photo = create(:planting, crop:)
+        PhotoAssociation.create!(photo: crop_photo, photographable: crop)
+        expect(planting_without_photo.thumbnail_url).to eq crop_photo.fullsize_url
+      end
+
+      it 'returns nil if neither planting nor crop has a photo' do
+        planting_without_photo = create(:planting, crop:)
+        expect(planting_without_photo.thumbnail_url).to be_nil
+      end
     end
   end
 
   context 'interesting plantings' do
-    it 'picks up interesting plantings' do
-      # plantings have members created implicitly for them
-      # each member is different, hence these are all interesting
-      @planting1 = FactoryGirl.create(:planting, created_at: 5.days.ago)
-      @planting2 = FactoryGirl.create(:planting, created_at: 4.days.ago)
-      @planting3 = FactoryGirl.create(:planting, created_at: 3.days.ago)
-      @planting4 = FactoryGirl.create(:planting, created_at: 2.days.ago)
-
-      # plantings need photos to be interesting
-      @photo = FactoryGirl.create(:photo)
-      [@planting1, @planting2, @planting3, @planting4].each do |p|
-        p.photos << @photo
-        p.save
+    describe 'picks up interesting plantings' do
+      before do
+        # plantings have members created implicitly for them
+        # each member is different, hence these are all interesting
+        @planting1 = create(:planting, :with_photo, planted_at: 5.days.ago)
+        @planting2 = create(:planting, :with_photo, planted_at: 4.days.ago)
+        @planting3 = create(:planting, :with_photo, planted_at: 3.days.ago)
+        @planting4 = create(:planting, :with_photo, planted_at: 2.days.ago)
       end
 
-      Planting.interesting.should eq [
-        @planting4,
-        @planting3,
-        @planting2,
-        @planting1
-      ]
+      it { expect(described_class.interesting).to eq([@planting4, @planting3, @planting2, @planting1]) }
     end
 
     context "default arguments" do
       it 'ignores plantings without photos' do
         # first, an interesting planting
-        @planting = FactoryGirl.create(:planting)
-        @planting.photos << FactoryGirl.create(:photo)
+        @planting = create(:planting)
+        @planting.photos << create(:photo, owner: @planting.owner)
         @planting.save
 
         # this one doesn't have a photo
-        @no_photo_planting = FactoryGirl.create(:planting)
+        @no_photo_planting = create(:planting)
 
-        Planting.interesting.should include @planting
-        Planting.interesting.should_not include @no_photo_planting
+        expect(described_class.interesting).to include @planting
+        expect(described_class.interesting).not_to include @no_photo_planting
       end
 
       it 'ignores plantings with the same owner' do
         # this planting is older
-        @planting1 = FactoryGirl.create(:planting, created_at: 1.day.ago)
-        @planting1.photos << FactoryGirl.create(:photo)
+        @planting1 = create(:planting, created_at: 1.day.ago)
+        @planting1.photos << create(:photo, owner_id: @planting1.owner_id)
         @planting1.save
 
         # this one is newer, and has the same owner, through the garden
-        @planting2 = FactoryGirl.create(:planting,
-          created_at: 1.minute.ago,
-          owner_id: @planting1.owner.id)
-        @planting2.photos << FactoryGirl.create(:photo)
+        @planting2 = create(:planting,
+                            created_at: 1.minute.ago,
+                            garden:     @planting1.garden,
+                            owner:      @planting1.owner)
+        @planting2.photos << create(:photo, owner: @planting2.owner)
         @planting2.save
 
         # result: the newer one is interesting, the older one isn't
-        Planting.interesting.should include @planting2
-        Planting.interesting.should_not include @planting1
+        expect(described_class.interesting).to include @planting2
+        expect(described_class.interesting).not_to include @planting1
       end
     end
 
     context "with howmany argument" do
       it "only returns the number asked for" do
-        @plantings = FactoryGirl.create_list(:planting, 10)
+        @plantings = create_list(:planting, 10)
         @plantings.each do |p|
-          p.photos << FactoryGirl.create(:photo, owner: planting.owner)
+          p.photos << create(:photo, owner: p.owner)
         end
-        Planting.interesting.limit(3).count.should eq 3
+        expect(described_class.interesting.limit(3).count).to eq 3
       end
     end
   end # interesting plantings
 
   context "finished" do
     it 'has finished fields' do
-      @planting = FactoryGirl.create(:finished_planting)
+      @planting = create(:finished_planting)
       @planting.finished.should be true
       @planting.finished_at.should be_an_instance_of Date
     end
 
     it 'has finished scope' do
-      @p = FactoryGirl.create(:planting)
-      @f = FactoryGirl.create(:finished_planting)
-      Planting.finished.should include @f
-      Planting.finished.should_not include @p
+      @p = create(:planting)
+      @f = create(:finished_planting)
+      described_class.finished.should include @f
+      described_class.finished.should_not include @p
     end
 
     it 'has current scope' do
-      @p = FactoryGirl.create(:planting)
-      @f = FactoryGirl.create(:finished_planting)
-      Planting.current.should include @p
-      Planting.current.should_not include @f
+      @p = create(:planting)
+      @f = create(:finished_planting)
+      described_class.current.should include @p
+      described_class.current.should_not include @f
     end
 
     context "finished date validation" do
       it 'requires finished date after planting date' do
-        @f = FactoryGirl.build(:finished_planting, planted_at: '2014-01-01', finished_at: '2013-01-01')
+        @f = build(:finished_planting, planted_at: '2014-01-01', finished_at: '2013-01-01')
         @f.should_not be_valid
       end
 
       it 'allows just the planted date' do
-        @f = FactoryGirl.build(:planting, planted_at: '2013-01-01', finished_at: nil)
+        @f = build(:planting, planted_at: '2013-01-01', finished_at: nil)
         @f.should be_valid
       end
 
       it 'allows just the finished date' do
-        @f = FactoryGirl.build(:planting, finished_at: '2013-01-01', planted_at: nil)
+        @f = build(:planting, finished_at: '2013-01-01', planted_at: nil)
         @f.should be_valid
       end
     end
   end
 
+  context "failed" do
+    let(:failed_planting) { create(:planting, failed: true) }
+
+    it 'has a failed field' do
+      expect(failed_planting.failed).to be true
+    end
+
+    it 'has a failed scope' do
+      @p = create(:planting)
+      @f = create(:planting, failed: true)
+      described_class.failed.should include @f
+      described_class.failed.should_not include @p
+    end
+
+    it 'is not included in the active scope' do
+      @p = create(:planting)
+      @f = create(:planting, failed: true)
+      described_class.active.should include @p
+      described_class.active.should_not include @f
+    end
+
+    it 'cannot be finished and failed' do
+      @f = build(:planting, finished: true, failed: true)
+      @f.should_not be_valid
+    end
+
+    it 'is not finished' do
+      @f = build(:planting, finished: true, failed: true)
+      expect(@f.finished?).to be false
+    end
+  end
+
   it 'excludes deleted members' do
-    expect(Planting.joins(:owner).all).to include(planting)
+    expect(described_class.joins(:owner).all).to include(planting)
     planting.owner.destroy
-    expect(Planting.joins(:owner).all).not_to include(planting)
+    expect(described_class.joins(:owner).all).not_to include(planting)
+  end
+
+  context 'ancestry' do
+    let(:parent_seed) { create(:seed) }
+    let(:planting) { create(:planting, parent_seed:) }
+
+    it "planting has a parent seed" do
+      expect(planting.parent_seed).to eq(parent_seed)
+    end
+
+    it "seed has a child planting" do
+      expect(parent_seed.child_plantings).to eq [planting]
+    end
+
+    describe 'grandchildren' do
+      let(:grandchild_seed) { create(:seed, parent_planting: planting) }
+
+      it { expect(grandchild_seed.parent_planting).to eq planting }
+      it { expect(grandchild_seed.parent_planting.parent_seed).to eq parent_seed }
+    end
+  end
+
+  describe 'active scope' do
+    let(:member) { create(:member) }
+    let!(:planting) do
+      create(:planting, owner: member, garden: member.gardens.first)
+    end
+    let!(:finished_planting) do
+      create(:finished_planting, owner: member, garden: member.gardens.first)
+    end
+    let!(:failed_planting) do
+      create(:planting, failed: true, owner: member, garden: member.gardens.first)
+    end
+
+    it { expect(member.plantings.active).to include(planting) }
+    it { expect(member.plantings.active).not_to include(finished_planting) }
+    it { expect(member.plantings.active).not_to include(failed_planting) }
+  end
+
+  describe 'homepage' do
+    subject { described_class.homepage_records(100) }
+
+    let!(:interesting_planting) { create(:planting, :with_photo) }
+    let!(:finished_interesting_planting) { create(:finished_planting, :with_photo) }
+    let!(:planting) { create(:planting) }
+
+    it { expect(subject.count).to eq 3 }
+    it { expect(subject.map(&:id)).to include(interesting_planting.id, finished_interesting_planting.id, planting.id) }
   end
 end

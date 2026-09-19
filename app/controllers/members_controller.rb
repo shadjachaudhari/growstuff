@@ -1,8 +1,9 @@
+# frozen_string_literal: true
+
 class MembersController < ApplicationController
-  load_and_authorize_resource except: [:finish_signup, :unsubscribe, :view_follows, :view_followers, :show]
-  skip_authorize_resource only: [:nearby, :unsubscribe, :finish_signup]
+  load_and_authorize_resource except: %i(finish_signup unsubscribe view_follows view_followers show)
+  skip_authorize_resource only: %i(nearby unsubscribe finish_signup)
   respond_to :html, :json, :rss
-  after_action :expire_homepage, only: :create
 
   def index
     @sort = params[:sort]
@@ -14,17 +15,34 @@ class MembersController < ApplicationController
   end
 
   def show
-    @member        = Member.confirmed.find(params[:id])
-    @twitter_auth  = @member.auth('twitter')
+    @member        = Member.confirmed.kept.find_by!(slug: params[:slug])
     @flickr_auth   = @member.auth('flickr')
-    @facebook_auth = @member.auth('facebook')
     @posts         = @member.posts
-    @gardens       = @member.gardens.active.order(:name)
 
-    # The garden form partial is called from the "New Garden" tab;
-    # it requires a garden to be passed in @garden.
-    # The new garden is not persisted unless Garden#save is called.
-    @garden = Garden.new
+    @activity = TimelineService.member_query(@member).limit(30)
+
+    @late = []
+    @super_late = []
+    @harvesting = []
+    @others = []
+
+    @member.plantings.active.annual.each do |planting|
+      if planting.finish_is_predicatable?
+        if planting.super_late?
+          @super_late << planting
+        elsif planting.late?
+          @late << planting
+        elsif planting.harvest_time?
+          @harvesting << planting
+        else
+          @others << planting
+        end
+      end
+    end
+
+    @harvests = Harvest.where(owner_id: @member.id)
+                       .recent
+                       .limit(16)
 
     respond_to do |format|
       format.html # show.html.haml
@@ -38,23 +56,8 @@ class MembersController < ApplicationController
     end
   end
 
-  def view_follows
-    @member = Member.confirmed.find(params[:login_name])
-    @follows = @member.followed.paginate(page: params[:page])
-  end
-
-  def view_followers
-    @member = Member.confirmed.find(params[:login_name])
-    @followers = @member.followers.paginate(page: params[:page])
-  end
-
-  EMAIL_TYPE_STRING = {
-    send_notification_email: "direct message notifications",
-    send_planting_reminder: "planting reminders"
-  }.freeze
-
   def unsubscribe
-    verifier = ActiveSupport::MessageVerifier.new(ENV['RAILS_SECRET_TOKEN'])
+    verifier = ActiveSupport::MessageVerifier.new(ENV.fetch('RAILS_SECRET_TOKEN', nil))
     decrypted_message = verifier.verify(params[:message])
 
     @member = Member.find(decrypted_message[:member_id])
@@ -62,7 +65,6 @@ class MembersController < ApplicationController
     @member.update(@type => false)
 
     flash.now[:notice] = I18n.t('members.unsubscribed', email_type: EMAIL_TYPE_STRING[@type])
-
   rescue ActiveSupport::MessageVerifier::InvalidSignature
     flash.now[:alert] = I18n.t('members.unsubscribe.error')
   end
@@ -83,21 +85,29 @@ class MembersController < ApplicationController
 
   private
 
+  EMAIL_TYPE_STRING = {
+    send_notification_email: "direct message notifications",
+    send_planting_reminder:  "planting reminders",
+    send_harvest_reminder:   "harvest reminders"
+  }.freeze
+
   def member_params
-    params.require(:member).permit(:login_name, :tos_agreement, :email, :newsletter)
+    params.require(:member).permit(:login_name, :tos_agreement, :email, :newsletter, :send_harvest_reminder)
   end
 
   def member_json_fields
-    [
-      :id, :login_name,
-      :slug, :bio, :created_at,
-      :location, :latitude, :longitude
-    ]
+    %i(
+      id login_name
+      slug bio created_at
+      location latitude longitude
+    )
   end
 
   def members
-    q = Member.confirmed
-    q = q.recently_joined if @sort == 'recently_joined'
-    q.paginate(page: params[:page])
+    if @sort == 'recently_joined'
+      Member.recently_joined
+    else
+      Member.order(:login_name)
+    end.kept.confirmed.paginate(page: params[:page])
   end
 end

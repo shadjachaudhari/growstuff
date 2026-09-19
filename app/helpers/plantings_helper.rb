@@ -1,18 +1,8 @@
-module PlantingsHelper
-  def display_days_before_maturity(planting)
-    # First try to calc from finished/finished_at
-    if planting.finished? || planting.finished_at.present?
-      planting.days_until_finished.to_s
-    # then try to calc from planted at + maturity
-    elsif planting.planted_at.present? && planting.days_before_maturity.present?
-      planting.days_until_mature.to_s
-    else
-      "unknown"
-    end
-  end
+# frozen_string_literal: true
 
+module PlantingsHelper
   def display_finished(planting)
-    if !planting.finished_at.nil?
+    if planting.finished_at.present?
       planting.finished_at
     elsif planting.finished
       "Yes (no date specified)"
@@ -22,11 +12,11 @@ module PlantingsHelper
   end
 
   def display_planted_from(planting)
-    !planting.planted_from.blank? ? planting.planted_from : "not specified"
+    planting.planted_from.presence || "not specified"
   end
 
   def display_planting_quantity(planting)
-    !planting.quantity.blank? ? planting.quantity : "not specified"
+    planting.quantity.presence || "not specified"
   end
 
   def display_planting(planting)
@@ -37,11 +27,67 @@ module PlantingsHelper
     elsif planting.planted_from.present?
       "#{planting.owner} planted #{planting.planted_from.pluralize}."
     else
-      "#{planting.owner}."
+      "#{planting.owner} planted #{planting.crop}."
     end
   end
 
-  def plantings_active_tickbox_path(owner, show_all)
-    show_inactive_tickbox_path('plantings', owner, show_all)
+  def days_from_now_to_finished(planting)
+    return unless planting.finish_is_predicatable?
+
+    (planting.finish_predicted_at - Time.zone.today).to_i
+  end
+
+  def days_from_now_to_first_harvest(planting)
+    return unless planting.planted_at.present? && planting.first_harvest_predicted_at.present?
+
+    (planting.first_harvest_predicted_at - Time.zone.today).to_i
+  end
+
+  # Returns a list of gardens the planting can be transplanted to
+  # based on the planting's owner.
+  def transplantable_gardens_by_owner(planting)
+    @transplantable_gardens ||= {}
+    cache_key = planting.id || planting.object_id
+    @transplantable_gardens[cache_key] ||= begin
+      garden_ids = planting.owner.gardens.select(:id).to_a + GardenCollaborator.where(member_id: planting.owner.id).select(:garden_id).to_a
+
+      Garden.active.where.not(id: planting.garden_id).where(id: garden_ids)
+    end
+  end
+
+  def days_from_now_to_last_harvest(planting)
+    return unless planting.planted_at.present? && planting.last_harvest_predicted_at.present?
+
+    (planting.last_harvest_predicted_at - Time.zone.today).to_i
+  end
+
+  def planting_classes(planting)
+    classes = []
+    classes << 'planting-growing' if planting.growing?
+    classes << 'planting-finished' if planting.finished?
+    classes << 'planting-harvest-time' if planting.harvest_time?
+    classes << 'planting-late' if planting.late?
+    classes << 'planting-super-late' if planting.super_late?
+    classes.join(' ')
+  end
+
+  def planting_status(planting)
+    if planting.crop.perennial
+      t 'planting.status.perennial'
+    elsif planting.finished?
+      t 'planting.status.finished'
+    elsif !planting.finish_is_predicatable?
+      t 'planting.status.not_enough_data'
+    elsif planting.harvest_time?
+      t 'planting.status.harvesting'
+    elsif planting.late?
+      t 'planting.status.late'
+    elsif planting.growing?
+      t 'planting.status.growing'
+    elsif !planting.planted?
+      t 'planting.status.not planted'
+    else
+      t 'planting.status.unknown'
+    end
   end
 end

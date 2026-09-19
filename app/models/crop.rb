@@ -1,150 +1,85 @@
-class Crop < ActiveRecord::Base
+# frozen_string_literal: true
+
+class Crop < ApplicationRecord
+  has_paper_trail
   extend FriendlyId
-  friendly_id :name, use: [:slugged, :finders]
+  include PhotoCapable
+  include OpenFarmData
+  include GbifData
+  include SearchCrops
 
-  has_many :scientific_names, after_add: :update_index, after_remove: :update_index
-  accepts_nested_attributes_for :scientific_names,
-    allow_destroy: true,
-    reject_if: :all_blank
+  friendly_id :name, use: %i(slugged finders)
 
-  has_many :alternate_names, after_add: :update_index, after_remove: :update_index, dependent: :destroy
-  has_many :plantings
-  has_many :photos, through: :plantings
-  has_many :seeds
-  has_many :harvests
-  has_many :plant_parts, -> { uniq.reorder("plant_parts.name") }, through: :harvests
-  belongs_to :creator, class_name: 'Member'
-  belongs_to :requester, class_name: 'Member'
+  ##
+  ## Relationships
+  belongs_to :creator, class_name: 'Member', optional: true, inverse_of: :created_crops
+  belongs_to :requester, class_name: 'Member', optional: true, inverse_of: :requested_crops
+  belongs_to :parent, class_name: 'Crop', optional: true, inverse_of: :varieties
+  has_many :scientific_names, dependent: :delete_all
+  has_many :alternate_names, dependent: :delete_all
+  has_many :plantings, dependent: :destroy
+  has_many :seeds, dependent: :destroy
+  has_many :harvests, dependent: :destroy
+  has_many :photo_associations, dependent: :delete_all, inverse_of: :crop
+  has_many :photos, through: :photo_associations
+  has_many :plant_parts, -> { joins_members.distinct.order("plant_parts.name") }, through: :harvests
+  has_many :varieties, class_name: 'Crop', foreign_key: 'parent_id', dependent: :nullify, inverse_of: :parent
+  has_many :crop_companions, foreign_key: :crop_a_id, dependent: :delete_all, inverse_of: :crop_a
+  has_many :companions, through: :crop_companions, source: :crop_b, class_name: 'Crop'
+  has_many :crop_posts, dependent: :delete_all
+  has_many :posts, through: :crop_posts, dependent: :delete_all
+  has_one :australian_food_classification_data,
+          foreign_key: :public_food_key,
+          primary_key: :public_food_key,
+          inverse_of:  :crop
 
-  belongs_to :parent, class_name: 'Crop'
-  has_many :varieties, class_name: 'Crop', foreign_key: 'parent_id'
-  has_and_belongs_to_many :posts # rubocop:disable Rails/HasAndBelongsToMany
-  before_destroy { |crop| crop.posts.clear }
+  accepts_nested_attributes_for :scientific_names, allow_destroy: true, reject_if: :all_blank
 
-  default_scope { order("lower(crops.name) asc") }
-  scope :recent, lambda {
-    approved.reorder("created_at desc")
-  }
-  scope :toplevel, lambda {
-    approved.where(parent_id: nil)
-  }
-  scope :popular, lambda {
-    approved.reorder("plantings_count desc, lower(name) asc")
-  }
-  scope :randomized, lambda {
-    # ok on sqlite and psql, but not on mysql
-    approved.reorder('random()')
-  }
+  ##
+  ## Scopes
+  scope :recent, -> { approved.order(created_at: :desc) }
+  scope :toplevel, -> { approved.where(parent_id: nil) }
+  scope :popular, -> { approved.order(Arel.sql("plantings_count desc, lower(name) asc")) }
   scope :pending_approval, -> { where(approval_status: "pending") }
   scope :approved, -> { where(approval_status: "approved") }
   scope :rejected, -> { where(approval_status: "rejected") }
-
   scope :interesting, -> { approved.has_photos }
   scope :has_photos, -> { includes(:photos).where.not(photos: { id: nil }) }
+  scope :joins_members, -> { joins("INNER JOIN members ON members.id = harvests.owner_id") }
 
+  ##
+  ## Validations
+  # Reasons are only necessary when rejecting
+  validates :reason_for_rejection, presence: true, if: :rejected?
+  validate :must_be_rejected_if_rejected_reasons_present
+  validate :must_have_meaningful_reason_for_rejection
   ## Wikipedia urls are only necessary when approving a crop
   validates :en_wikipedia_url,
-    format: {
-      with: %r{\Ahttps?:\/\/en\.wikipedia\.org\/wiki\/[[:alnum:]%_\.()-]+\z},
-      message: 'is not a valid English Wikipedia URL'
-    },
-    if: :approved?
-
-  ## Reasons are only necessary when rejecting
-  validates :reason_for_rejection, presence: true, if: :rejected?
-
-  ## This validation addresses a race condition
-  validate :approval_status_cannot_be_changed_again
-
-  validate :must_be_rejected_if_rejected_reasons_present
-
-  validate :must_have_meaningful_reason_for_rejection
-
-  ####################################
-  # Elastic search configuration
-  if ENV["GROWSTUFF_ELASTICSEARCH"] == "true"
-    include Elasticsearch::Model
-    include Elasticsearch::Model::Callbacks
-    # In order to avoid clashing between different environments,
-    # use Rails.env as a part of index name (eg. development_growstuff)
-    index_name [Rails.env, "growstuff"].join('_')
-    settings index: { number_of_shards: 1 },
-             analysis: {
-               tokenizer: {
-                 gs_edgeNGram_tokenizer: {
-                   type: "edgeNGram", # edgeNGram: NGram match from the start of a token
-                   min_gram: 3,
-                   max_gram: 10,
-                   # token_chars: Elasticsearch will split on characters
-                   # that don't belong to any of these classes
-                   token_chars: %w(letter digit)
-                 }
-               },
-               analyzer: {
-                 gs_edgeNGram_analyzer: {
-                   tokenizer: "gs_edgeNGram_tokenizer",
-                   filter: ["lowercase"]
-                 }
-               }
-             } do
-      mappings dynamic: 'false' do
-        indexes :id, type: 'long'
-        indexes :name, type: 'string', analyzer: 'gs_edgeNGram_analyzer'
-        indexes :approval_status, type: 'string'
-        indexes :scientific_names do
-          indexes :name,
-            type: 'string',
-            analyzer: 'gs_edgeNGram_analyzer',
-            # Disabling field-length norm (norm). If the norm option is turned on(by default),
-            # higher weigh would be given for shorter fields, which in our case is irrelevant.
-            norms: { enabled: false }
-        end
-        indexes :alternate_names do
-          indexes :name, type: 'string', analyzer: 'gs_edgeNGram_analyzer'
-        end
-      end
-    end
-  end
-
-  def as_indexed_json(_options = {})
-    as_json(
-      only: [:id, :name, :approval_status],
-      include: {
-        scientific_names: { only: :name },
-        alternate_names: { only: :name }
-      }
-    )
-  end
-
-  # update the Elasticsearch index (only if we're using it in this
-  # environment)
-  def update_index(_name_obj)
-    __elasticsearch__.index_document if ENV["GROWSTUFF_ELASTICSEARCH"] == "true"
-  end
-
-  # End Elasticsearch section
+            format: {
+              with:    %r{\Ahttps?://en\.wikipedia\.org/wiki/[[:alnum:]%_.()-]+\z},
+              message: :not_a_valid_wikipedia_url
+            },
+            if:     :approved?
+  validates :en_youtube_url,
+            format: {
+              with:    %r{\A(?:https?://)?(?:www\.)?(?:youtube(?:-nocookie)?\.com/(?:(?:v|e(?:mbed)?)/|\S*?[?&]v=)|youtu\.be/)[a-zA-Z0-9_-]{11}(?:[?&]\S*)?\z},
+              message: :not_a_valid_youtube_url
+            },
+            allow_blank: true
+  validates :name, uniqueness: { scope: :approval_status }, if: :pending?
 
   def to_s
     name
   end
 
+  def to_param
+    slug
+  end
+
   def default_scientific_name
-    scientific_names.first.name unless scientific_names.empty?
+    scientific_names.first
   end
 
-  # crop.default_photo
-  # currently returns the first available photo, but exists so that
-  # later we can choose a default photo based on different criteria,
-  # eg. popularity
-  def default_photo
-    return photos.first if photos.any?
-
-    # Crop has no photos? Look for the most recent harvest with a photo.
-    harvest_with_photo = Harvest.where(crop_id: id).joins(:photos).order('harvests.id DESC').limit(1).first
-    harvest_with_photo.photos.first if harvest_with_photo
-  end
-
-  # crop.sunniness
   # returns hash indicating whether this crop is grown in
   # sun/semi-shade/shade
   # key: sunniness (eg. 'sun')
@@ -153,7 +88,6 @@ class Crop < ActiveRecord::Base
     count_uses_of_property 'sunniness'
   end
 
-  # crop.planted_from
   # returns a hash of propagation methods (seed, seedling, etc),
   # key: propagation method (eg. 'seed')
   # value: count of how many times it's been used by plantings
@@ -161,24 +95,27 @@ class Crop < ActiveRecord::Base
     count_uses_of_property 'planted_from'
   end
 
-  # crop.popular_plant_parts
   # returns a hash of most harvested plant parts (fruit, seed, etc)
   # key: plant part (eg. 'fruit')
   # value: count of how many times it's been used by harvests
   def popular_plant_parts
     PlantPart.joins(:harvests)
       .where("crop_id = ?", id)
-      .order("count_harvests_id DESC")
+      .order(count_harvests_id: :desc)
       .group("plant_parts.id", "plant_parts.name")
       .count("harvests.id")
   end
 
+  def perennial?
+    perennial == true
+  end
+
+  def annual?
+    perennial == false
+  end
+
   def interesting?
-    min_plantings = 3 # needs this many plantings to be interesting
-    min_photos    = 3 # needs this many photos to be interesting
-    return false unless photos.size >= min_photos
-    return false unless plantings_count >= min_plantings
-    true
+    photos.size >= 3 || plantings_count >= 3
   end
 
   def pending?
@@ -203,55 +140,45 @@ class Crop < ActiveRecord::Base
 
   def rejection_explanation
     return rejection_notes if reason_for_rejection == "other"
+
     reason_for_rejection
   end
 
-  # Crop.search(string)
-  def self.search(query)
-    if ENV['GROWSTUFF_ELASTICSEARCH'] == "true"
-      search_str = query.nil? ? "" : query.downcase
-      response = __elasticsearch__.search( # Finds documents which match any field, but uses the _score from
-        # the best field insead of adding up _score from each field.
-        query: {
-          multi_match: {
-            query: search_str.to_s,
-            analyzer: "standard",
-            fields: ["name",
-                     "scientific_names.scientific_name",
-                     "alternate_names.name"]
-          }
-        },
-        filter: {
-          term: { approval_status: "approved" }
-        },
-        size: 50
-      )
-      response.records.to_a
-    else
-      # if we don't have elasticsearch, just do a basic SQL query.
-      # also, make sure it's an actual array not an activerecord
-      # collection, so it matches what we get from elasticsearch and we can
-      # manipulate it in the same ways (eg. deleting elements without deleting
-      # the whole record from the db)
-      matches = Crop.approved.where("name ILIKE ?", "%#{query}%").to_a
+  def update_medians
+    plantings.each(&:update_harvest_days!)
+    update_lifespan_medians
+    update_harvest_medians
+  end
 
-      # we want to make sure that exact matches come first, even if not
-      # using elasticsearch (eg. in development)
-      exact_match = Crop.approved.find_by(name: query)
-      if exact_match
-        matches.delete(exact_match)
-        matches.unshift(exact_match)
-      end
+  def update_lifespan_medians
+    # Median lifespan of plantings
+    update(median_lifespan: Planting.where(crop: self).median(:lifespan))
+  end
 
-      matches
-    end
+  def update_harvest_medians
+    update(median_days_to_first_harvest: Planting.where(crop: self).median(:days_to_first_harvest))
+    update(median_days_to_last_harvest: Planting.where(crop: self).median(:days_to_last_harvest))
   end
 
   def self.case_insensitive_name(name)
     where(["lower(crops.name) = :value", { value: name.downcase }])
   end
 
+  def all_companions
+    @all_companions ||= if parent
+                          (companions + parent.all_companions).uniq
+                        else
+                          companions
+                        end
+  end
+
+  before_destroy :destroy_reverse_companionships
+
   private
+
+  def destroy_reverse_companionships
+    CropCompanion.where(crop_b: self).destroy_all
+  end
 
   def count_uses_of_property(col_name)
     plantings.unscoped
@@ -261,21 +188,16 @@ class Crop < ActiveRecord::Base
       .count
   end
 
-  # Custom validations
-  def approval_status_cannot_be_changed_again
-    previous = previous_changes.include?(:approval_status) ? previous_changes.approval_status : {}
-    return unless previous.include?(:rejected) || previous.include?(:approved)
-    errors.add(:approval_status, "has already been set to #{approval_status}")
-  end
-
   def must_be_rejected_if_rejected_reasons_present
     return if rejected?
     return unless reason_for_rejection.present? || rejection_notes.present?
-    errors.add(:approval_status, "must be rejected if a reason for rejection is present")
+
+    errors.add(:approval_status, :rejection_reason_required)
   end
 
   def must_have_meaningful_reason_for_rejection
     return unless reason_for_rejection == "other" && rejection_notes.blank?
-    errors.add(:rejection_notes, "must be added if the reason for rejection is \"other\"")
+
+    errors.add(:rejection_notes, :rejection_notes_required)
   end
 end
